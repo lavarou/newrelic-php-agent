@@ -81,3 +81,4 @@ jobs:
           echo test, and deploy your project.
           lsb_release -a
           ## apt list --installed
+          
