@@ -1,0 +1,163 @@
+# This is an agnostic workflow configured to be used only as a
+# called workflow from the workflow_trigger action.
+# It is meant to be used by multiple teams for the same purpose.
+---
+name: Deploy Linux
+
+on:
+  workflow_dispatch:
+    # Check that all of these input values are required:
+    inputs:
+      agent_version:
+        description: 'Agent Version to deploy.  Needs to match the version from the Release Workflow (all_solutions.yml). Format: X.X.X'
+        required: true
+      run_id:
+        description: 'Run ID of the Release Workflow (all_solutions.yml) that was triggered by creating a Release in GitHub.  ID can be found in URL for run.'
+        required: true
+      # The repo and repo token might not be strictly required of we checkout
+      # the required repositories locally. Still, best practice here would
+      # be to support any repo
+      download_repo:
+        description: 'The repository to use for downloading deploy artifacts'
+        required: false
+      download_repo_token:
+        description: 'The access token to use a non-local repository'
+        required: false
+      download_called_workflow:
+        description: 'The workflow yaml to reference for the artifact download'
+        required: true
+      download_artifact_name:
+        description: 'The name of the download artifact'
+        required: true
+      local_upload_artifact_name:
+        description: 'The local artifact name to upload to the current/default/local repository'
+        required: true
+      local_upload_deploy_name:
+        description: 'The local deploy tooling artifact name to upload to the current/default/local repository'
+        required: true
+      linux-deploy-to-production:
+        description: 'Boolean for prod deployment'
+        required: true
+        default: false
+      deploy:
+        description: 'Boolean for prod deployment'
+        required: true
+        default: false
+
+# env:
+  # DOTNET_NOLOGO: true
+
+jobs:
+  # This job containes no scripts, only actions and therefore
+  # Might be replicated as is, with changes to workfloww called, etc.
+  # Ask Amber about whay should be uised for PHP team, IF
+  # some of these values cannot be supported with inputs
+  # Workflow_trigger can be used to call this workfloww, It might
+  # be prudent to create a newrelic-workflowss repository, OR
+  # just create workflows in the newrelic-actions to supportt the custom actions
+  # as required.
+  deploy-linux:
+    # needs: get-external-artifacts
+    # GHA input value
+    if: ${{ github.event.inputs.linux == 'true' }}
+    name: Deploy Linux to APT and YUM
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install dos2unix
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y dos2unix
+        shell: bash
+
+      # Is this necessary?  Don't hey already exist fromt he first job?
+      # Need more info.  We can always create another agnostic workflow
+      # for this.
+      # Will artifact names be consistent?
+      # Are they correct for PHP team?
+      - name: Download Deploy Artifacts
+        uses: actions/download-artifact@v2
+        with:
+          name: deploy-artifacts
+          path: ${{ github.workspace }}/
+
+      # Will artifact names be consistent?
+      # Are they correct for PHP team?
+      - name: Download Deploy Tooling
+        uses: actions/download-artifact@v2
+        with:
+          name: deploy-tooling
+          path: ${{ github.workspace }}/deploy
+
+      # GHA: Handle this from within shell script?
+      # GHA: Or call this fromt he action.yml?
+      # GHA: Review this action
+      - name: Get GPG Key
+        id: write_gpgkey
+        uses: timheuer/base64-to-file@v1
+        with:
+          fileName: 'gpg.tar.bz2'
+          encodedString: ${{ secrets.GPG_KEY }}
+
+      # This is shell scripting - move to action.sh (if custom action strategy)
+      - name: Move Artifacts and GPG Key to Staging Location
+        run: |
+          cp LinuxRpm/*.rpm ${{ github.workspace }}/deploy/linux/packages
+          cp LinuxDeb/*.deb ${{ github.workspace }}/deploy/linux/packages
+          cp -f ${{ steps.write_gpgkey.outputs.filePath }} ${{ github.workspace }}/deploy/linux/deploy_scripts/gpg.tar.bz2
+        shell: bash
+
+      # GHA: Lots of secrets required here
+      # GHA: Can we standardize names?
+      - name: Prepare docker.env
+        run: |
+          # Confirm that the version is in the proper format.
+          IFS='.' read -ra agent_version_array <<< "${{ github.event.inputs.agent_version }}"
+          agent_version_count=${#agent_version_array[@]}
+          if [ $agent_version_count -lt 3 ] || [ $agent_version_count -gt 4 ] ; then
+            echo "::error Supplied agent version from Workflow (${{ github.event.inputs.agent_version }}) is malformed.  It needs to be like 8.29.0 or 8.29.0.0"
+            exit 1
+          elif [ $agent_version_count -eq 4 ] ; then
+            AGENT_VERSION=${{ github.event.inputs.agent_version }}
+          else
+            AGENT_VERSION=${{ github.event.inputs.agent_version }}.0
+          fi
+
+          # Build the docker.env
+          cd ${{ github.workspace }}/deploy/linux/
+          touch docker.env
+          echo "AGENT_VERSION=$AGENT_VERSION" >> docker.env
+          echo "ACTION=release" >> docker.env
+          if [ "${{ github.event.inputs.linux-deploy-to-production }}" == "true" ] ; then
+            # We're actually deploying to production (apt.newrelic.com and yum.newrelic.com)
+            echo "S3_BUCKET=${{ secrets.PROD_MAIN_S3 }}" >> docker.env
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.LINUX_AWS_ACCESS_KEY_ID }}" >> docker.env
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.LINUX_AWS_SECRET_ACCESS_KEY }}" >> docker.env
+          else
+            # Deploy to the test bucket that mirrors apt/yum.newrelic.com
+            echo "S3_BUCKET=${{ secrets.TEST_S3_BUCKET }}" >> docker.env
+            echo "AWS_ACCESS_KEY_ID=${{ secrets.TEST_BUCKET_AWS_ACCESS_KEY_ID }}" >> docker.env
+            echo "AWS_SECRET_ACCESS_KEY=${{ secrets.TEST_BUCKET_AWS_SECRET_ACCESS_KEY }}" >> docker.env
+          fi
+          echo "GPG_KEYS=/deployscripts/gpg.tar.bz2" >> docker.env
+        shell: bash
+
+      - name: Build and Run Container
+        run: |
+          cd ${{ github.workspace }}/deploy/linux/
+          find . -name "*.bash" |xargs chmod a+x
+          find . -type f |xargs dos2unix
+          docker-compose build
+          if [ "${{ github.event.inputs.deploy }}" == "true" ] ; then
+            docker-compose run deploy_packages
+          else
+            echo "Input:deploy was not true (${{ github.event.inputs.deploy }}).  The following deploy command was not run:"
+            echo "docker-compose run deploy_packages"
+          fi
+        shell: bash
+
+      # Might be best to add as part of the workflow calling the action
+      - name: Clear Fastly cache
+        if: ${{ success() }}
+        run: |
+          curl -i -X POST -H 'Fastly-Key:${{ secrets.FASTLY_TOKEN }}' ${{ secrets.FASTLY_URL }}
+        shell: bash
