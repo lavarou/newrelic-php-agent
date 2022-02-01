@@ -40,12 +40,12 @@ on:
 
 jobs:
   # This job containes no scripts, only actions and therefore
-  # Might be replicated as is, with changes to workfloww called, etc.
-  # Ask Amber about whay should be uised for PHP team, IF
+  # Might be replicated as is, with changes to workflow called, etc.
+  # Ask Amber about whay should be used for PHP team, IF
   # some of these values cannot be supported with inputs
-  # Workflow_trigger can be used to call this workfloww, It might
+  # Workflow_trigger can be used to call this workflow, It might
   # be prudent to create a newrelic-workflowss repository, OR
-  # just create workflows in the newrelic-actions to supportt the custom actions
+  # just create workflows in the newrelic-actions to support the custom actions
   # as required.
   get-external-artifacts:
     name: Get and Publish Deploy Artifacts Locally
@@ -73,13 +73,13 @@ jobs:
       - name: Upload Deploy Artifacts Locally
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ github.event.inputs.upload_artifact_name }}
+          name: ${{ github.event.inputs.local_upload_artifact_name }}
           path: ${{ github.workspace }}/build/BuildArtifacts
           if-no-files-found: error
 
       - name: Upload Deploy Tooling Locally
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ github.event.inputs.upload_deploy_name }}
+          name: ${{ github.event.inputs.local_upload_deploy_name }}
           path: ${{ github.workspace }}/deploy/
           if-no-files-found: error

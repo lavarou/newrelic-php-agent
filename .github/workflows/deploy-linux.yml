@@ -48,18 +48,11 @@ on:
   # DOTNET_NOLOGO: true
 
 jobs:
-  # This job containes no scripts, only actions and therefore
-  # Might be replicated as is, with changes to workfloww called, etc.
-  # Ask Amber about whay should be uised for PHP team, IF
-  # some of these values cannot be supported with inputs
-  # Workflow_trigger can be used to call this workfloww, It might
-  # be prudent to create a newrelic-workflowss repository, OR
-  # just create workflows in the newrelic-actions to supportt the custom actions
-  # as required.
   deploy-linux:
     # needs: get-external-artifacts
     # GHA input value
-    if: ${{ github.event.inputs.linux == 'true' }}
+    # Below not required?
+    # if: ${{ github.event.inputs.linux == 'true' }}
     name: Deploy Linux to APT and YUM
     runs-on: ubuntu-latest
     steps:
