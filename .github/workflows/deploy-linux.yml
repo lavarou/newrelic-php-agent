@@ -62,7 +62,7 @@ jobs:
           sudo apt-get install -y dos2unix
         shell: bash
 
-      # Is this necessary?  Don't hey already exist fromt he first job?
+      # Is this necessary?  Don't they already exist fromt he first job?
       # Need more info.  We can always create another agnostic workflow
       # for this.
       # Will artifact names be consistent?
@@ -79,7 +79,7 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           name: deploy-tooling
-          path: ${{ github.workspace }}/deploy
+          path: ${{ github.workspace }}/deploy  #This path does not exist for PHP agent repo
 
       # GHA: Handle this from within shell script?
       # GHA: Or call this fromt he action.yml?
@@ -93,6 +93,7 @@ jobs:
 
       # This is shell scripting - move to action.sh (if custom action strategy)
       - name: Move Artifacts and GPG Key to Staging Location
+        # Below paths (deploy) does not exist for PHP agent repo
         run: |
           cp LinuxRpm/*.rpm ${{ github.workspace }}/deploy/linux/packages
           cp LinuxDeb/*.deb ${{ github.workspace }}/deploy/linux/packages
@@ -135,6 +136,7 @@ jobs:
         shell: bash
 
       - name: Build and Run Container
+        # Below paths (deploy) does not exist for PHP agent repo
         run: |
           cd ${{ github.workspace }}/deploy/linux/
           find . -name "*.bash" |xargs chmod a+x

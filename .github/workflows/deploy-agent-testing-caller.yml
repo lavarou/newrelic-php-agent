@@ -50,7 +50,7 @@ jobs:
       # in the caller workflow workspace.
 
 
-      # The called workflow for dotnet requires artifacts generated from 
+      # The called workflow for dotnet requires artifacts generated from
       # github/newrelic/fork-newrelic-dotnet-agent/.github/workflows/all_solutions.yml
       # Do we have an equivalent for PHP?
       # Do we call that workflow first to generate required artifacts.
@@ -62,10 +62,20 @@ jobs:
           called_workflow: get-external-artifacts.yml
           refresh_interval: 30
           # add fields to pass to called workflow via dispatch
+          # FIELD_1:
+          # FIELD_2:
+          # FIELD_3:
+          # FIELD_4:
+          # FIELD_5:
+          # FIELD_6:
+          # FIELD_7:
+          # FIELD_8:
 
       # While this should work, check with the team about
       # appropriate level of detail needed in returned monitoring
       # of the called worflow
+      # NOTE THIS WILL NOT WORK IN ITS CURRENT STATE
+      # IF THE WORKFLOW IS NON-LOCAL
       - name: "Method 1, step 2: Call get-external-artifacts"
         uses: ./newrelic-actions/workflow_trigger_beta_v1
         with:
@@ -78,7 +88,7 @@ jobs:
 
       # Second method: Testing deploy agent composite action
       # Call the get external artifacts via workflow_trigger first
-      - name: "Method 2, step 1: Testing the deploy agent action"
+      - name: "Method 2, step 2: Testing the deploy agent action"
         uses: ./newrelic-actions/deploy_agent_beta_v1
         with:
           access_token: ${{ secrets.API_CLI_TOKEN }}

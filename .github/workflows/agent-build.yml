@@ -9,19 +9,19 @@
 name: agent-build
 
 #
-# Controls when the action will run. 
+# Controls when the action will run.
 #
 on:
   #
   # Triggers the workflow on push or pull request events but only for the main branch
   #
   push:
-    branches: 
+    branches:
       - main
       - 'php8'
       - 'dev'
   pull_request:
-    branches: 
+    branches:
       - main
       - 'php8'
       - 'dev'
@@ -58,7 +58,7 @@ jobs:
           php_ver: '7.4'
           arch: 'x86'
     steps:
-      - name: Checkout Repo 
+      - name: Checkout Repo
         uses: actions/checkout@v2
       - name: Build Custom Docker Image
         run: docker build --build-arg ARCH=$ARCH --build-arg PHP_VER=$PHP_VER --build-arg BUILD_TYPE=$BUILD_TYPE -f ./.github/docker/${OS}/${ARCH}/Dockerfile -t $image_name .
