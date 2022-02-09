@@ -48,6 +48,12 @@ jobs:
       # while it may bepossible to generate artifacts in another workflow, they
       # will always have to be downloaded explicitly
       # in the caller workflow workspace.
+
+
+      # The called workflow for dotnet requires artifacts generated from 
+      # github/newrelic/fork-newrelic-dotnet-agent/.github/workflows/all_solutions.yml
+      # Do we have an equivalent for PHP?
+      # Do we call that workflow first to generate required artifacts.
       - name: "Method 1, step 1: Call get-external-artifacts"
         uses: ./newrelic-actions/workflow_trigger_beta_v1
         with:
@@ -65,7 +71,7 @@ jobs:
         with:
           # called_repo: github.com/kentonshade/gha
           access_token: ${{ secrets.API_CLI_TOKEN }}
-          called_workflow: deply-linux.yml
+          called_workflow: deploy-linux.yml
           refresh_interval: 30
           # add fields to pass to called workflow via dispatch
 

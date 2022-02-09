@@ -40,13 +40,18 @@ on:
 
 jobs:
   # This job containes no scripts, only actions and therefore
-  # Might be replicated as is, with changes to workflow called, etc.
+  # might be replicated as is, with changes to workflow called, etc.
   # Ask Amber about whay should be used for PHP team, IF
   # some of these values cannot be supported with inputs
   # Workflow_trigger can be used to call this workflow, It might
-  # be prudent to create a newrelic-workflowss repository, OR
+  # be prudent to create a newrelic-workflows repository, OR
   # just create workflows in the newrelic-actions to support the custom actions
   # as required.
+  ##
+  # The called workflow for dotnet requires artifacts generated from 
+  # github/newrelic/fork-newrelic-dotnet-agent/.github/workflows/all_solutions.yml
+  # Do we have an equivalent for PHP?
+  # Do we call that workflow first to generate required artifacts.
   get-external-artifacts:
     name: Get and Publish Deploy Artifacts Locally
     runs-on: ubuntu-latest
@@ -59,13 +64,14 @@ jobs:
           # Check on below for access to repo
           # We should add a repo value:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          # This workflow is generaating artifacts, review and see what we need
+          # This workflow is generating artifacts, review and see what we need
           # in the custom action:
-          # This might be best configured as a wortkflow_dipatch input
-          workflow: ${{ github.event.inputs.called_workflow }}
-          # This is referring to a woorkflow_dispatch input, run_id
+          # This might be best configured as a workflow_dipatch input
+          ## WHAT WORKFLOW GENERATES ARTIFACTS (EXISTING ARTIFACT)
+          workflow: ${{ github.event.inputs.download_called_workflow }}
+          # This is referring to a workflow_dispatch input, run_id
           # will need to be replicated in acttion
-          run_id: ${{ github.event.inputs.run_id }}
+          ## WHAT ARTIFACT NAME SHOULD BE USING TO TEST
           name: ${{ github.event.inputs.download_artifact_name }}
           path: ${{ github.workspace }}
           repo: ${{ github.repository }}
@@ -73,13 +79,15 @@ jobs:
       - name: Upload Deploy Artifacts Locally
         uses: actions/upload-artifact@v2
         with:
+          ## WHAT ARTIFACT WILL BE UPLOADED FOR TESTING?
           name: ${{ github.event.inputs.local_upload_artifact_name }}
-          path: ${{ github.workspace }}/build/BuildArtifacts
+          path: ${{ github.workspace }}/build/BuildArtifacts  # Does not exist in PHP agent repo
           if-no-files-found: error
 
       - name: Upload Deploy Tooling Locally
         uses: actions/upload-artifact@v2
         with:
+          ## HOW ARE THESE PATHS GENERATED?
           name: ${{ github.event.inputs.local_upload_deploy_name }}
-          path: ${{ github.workspace }}/deploy/
+          path: ${{ github.workspace }}/deploy/  # Does not exist in PHP agent repo
           if-no-files-found: error
