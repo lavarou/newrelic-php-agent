@@ -62,14 +62,14 @@ jobs:
           called_workflow: get-external-artifacts.yml
           refresh_interval: 30
           # add fields to pass to called workflow via dispatch
-          # FIELD_1:
-          # FIELD_2:
-          # FIELD_3:
-          # FIELD_4:
-          # FIELD_5:
-          # FIELD_6:
-          # FIELD_7:
-          # FIELD_8:
+          # FIELD_1: agent_version=
+          # FIELD_2: run_id=
+          # FIELD_3: download_repo=
+          # FIELD_4: download_repo_token=
+          # FIELD_5: download_called_workflow=
+          # FIELD_6: download_artifact_name=
+          # FIELD_7: local_upload_artifact_name=
+          # FIELD_8: local_upload_deploy_name=
 
       # While this should work, check with the team about
       # appropriate level of detail needed in returned monitoring

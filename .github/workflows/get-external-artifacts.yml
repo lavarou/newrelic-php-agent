@@ -63,7 +63,7 @@ jobs:
         with:
           # Check on below for access to repo
           # We should add a repo value:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
+          github_token: ${{ github.event.inputs.download_repo_token }}
           # This workflow is generating artifacts, review and see what we need
           # in the custom action:
           # This might be best configured as a workflow_dipatch input
