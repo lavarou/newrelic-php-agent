@@ -13,6 +13,10 @@ name: NEW release_CI
 # Control when the action will run.
 #
 on:
+  # GHA only using this for testing
+  push:
+    branches:
+      - gha-testing
   #
   # Run this workflow manually from the Actions tab or using the API
   #
