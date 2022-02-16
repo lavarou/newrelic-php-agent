@@ -75,7 +75,7 @@ jobs:
     strategy:
       matrix:
         registry: [mycirrus]
-        image: [newrelic:nr-alpine-3.14--1.0]
+        image: ['newrelic:nr-alpine-3.14--1.0']
         os: [linux]
         # php_ver: ['7.0', '7.1', '7.2', '7.3', '7.4', '8.0', '8.0-zts']
         php_ver: ['7.0']
