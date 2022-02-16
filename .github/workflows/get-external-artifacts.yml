@@ -48,7 +48,7 @@ jobs:
   # just create workflows in the newrelic-actions to support the custom actions
   # as required.
   ##
-  # The called workflow for dotnet requires artifacts generated from 
+  # The called workflow for dotnet requires artifacts generated from
   # github/newrelic/fork-newrelic-dotnet-agent/.github/workflows/all_solutions.yml
   # Do we have an equivalent for PHP?
   # Do we call that workflow first to generate required artifacts.
@@ -56,6 +56,21 @@ jobs:
     name: Get and Publish Deploy Artifacts Locally
     runs-on: ubuntu-latest
     steps:
+      # CHECKOUT REQUIRE REPOS FOR ARTIFACT GENERATION
+      # Checkout the Internal PHP Agent repo
+      - name: Checkout Internal Agent Repo
+        uses: actions/checkout@v2
+        with:
+          repository: newrelic/php-agent-php_deployment
+          # GHA Choose appropriate ref:
+          ref: main
+          # GHA Choose approprite token:
+          token: ${{ secrets.API_CLI_TOKEN }}
+          # GHA determine if path for the internal repo is critical
+          path: internal
+
+      # GHA will we need to download anything if we're going to generate
+      # artifacts after the previous step (internal repo build scripts?)
       - name: Download Deploy Artifacts
         # Below third party action will have to be monitored/watched
         # Also add the valued we need for external or non-local repos
@@ -76,6 +91,8 @@ jobs:
           path: ${{ github.workspace }}
           repo: ${{ github.repository }}
 
+      # GHA 02/15/2022 - the actual process may differ 
+      # from what .NET uses below.
       - name: Upload Deploy Artifacts Locally
         uses: actions/upload-artifact@v2
         with:
