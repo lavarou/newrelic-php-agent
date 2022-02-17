@@ -97,8 +97,13 @@ jobs:
       #   run: docker build --build-arg ARCH=$ARCH --build-arg PHP_VER=$PHP_VER --build-arg BUILD_TYPE=$BUILD_TYPE -f ./.github/docker/${OS}/${ARCH}/Dockerfile -t $image_name .
       - name: Build and Test
         run: |
+          echo "current directory is " $(pwd)
+          ls -la
           cd / && ls -la
-          ls -la opt/
+          ls -la opt/nr/
+          ls -la github/
+          echo "check our workspace"
+          ls -la __w/newrelic-php-agent/newrelic-php-agent/
 
       # Check ENV variables
       # GHA: Check for IMAGE_OS value per matix run
