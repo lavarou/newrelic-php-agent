@@ -58,24 +58,29 @@ jobs:
   #         path: releases
   #         if-no-files-found: error
 
+  # GHA: it might be prudent to break thes jobs up per OS
+  # It might be a little convoluted to be checking for OS and then
+  # script as required in a single job.
   agent_release_by_image:
     env:
       # GHA we need to add the various PHP versions supported to PHP_VER
+      # Confirm that these are passed to the container(s)
       PHP_VER: ${{ matrix.php_ver }}
       ARCH: ${{ matrix.arch }}
       BUILD_TYPE: release
       OS: ${{ matrix.os }}
       image_name: ${{ matrix.os }}:${{ matrix.php_ver }}${{ matrix.arch }}
+      IMAGE_OS: ${{ matrix.image_os }}
     runs-on: ubuntu-latest
-    container:  ## kds = testing using private docker image
-      image: ${{ matrix.registry }}/${{ matrix.image }}
+    container:  ## GHA: testing using private docker image
+      image: ${{ matrix.registry }}/${{ matrix.image_os }}
       credentials:
         username: ${{ secrets.DOCKER_REPO_USER }}
         password: ${{ secrets.DOCKER_USER_TOKEN }}
     strategy:
       matrix:
         registry: [mycirrus]
-        image: ['newrelic:nr-alpine-3.14--1.0']
+        image_os: ['newrelic:nr-alpine-3.14--1.0', 'newrelic:nr-alpine3.4-1.0', 'newrelic:nr-centos8-1.0', 'newrelic:nr-centos7-1.1']
         os: [linux]
         # php_ver: ['7.0', '7.1', '7.2', '7.3', '7.4', '8.0', '8.0-zts']
         php_ver: ['7.0']
@@ -93,6 +98,13 @@ jobs:
       - name: Build and Test
         run: |
           cd / && ls -la
+          ls -la opt/
+
+      # Check ENV variables
+      # GHA: Check for IMAGE_OS value per matix run
+      - name: Check environmental variables
+        run: printenv | sort -f
+
 
       # - name: Save build artifacts
       #   uses: actions/upload-artifact@v2
