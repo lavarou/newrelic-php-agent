@@ -105,6 +105,12 @@ jobs:
           echo "check our workspace"
           ls -la __w/newrelic-php-agent/newrelic-php-agent/
 
+      -name: Test call of release_build.sh
+       if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' }}
+       run: |
+         echo "This is CentOS 8, calling release_build.sh"
+         ./.github/docker/linux/release_build.sh
+
       # Check ENV variables
       # GHA: Check for IMAGE_OS value per matix run
       - name: Check environmental variables
