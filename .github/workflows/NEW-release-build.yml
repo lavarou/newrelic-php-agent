@@ -111,6 +111,16 @@ jobs:
       # GHA No need to build these images? everything should be installed
       # - name: Build Custom Docker Image
       #   run: docker build --build-arg ARCH=$ARCH --build-arg PHP_VER=$PHP_VER --build-arg BUILD_TYPE=$BUILD_TYPE -f ./.github/docker/${OS}/${ARCH}/Dockerfile -t $image_name .
+      - name: Check the workspace
+        run: |
+          echo "current directory is " $(pwd)
+          ls -la
+
+      - name: Check php-build-scripts
+        run: |
+          echo "current directory is " $(pwd)
+          ls -la php-build-scripts/
+
       - name: Build and Test
         run: |
           echo "current directory is " $(pwd)
@@ -118,14 +128,12 @@ jobs:
           cd / && ls -la
           ls -la opt/nr/
           ls -la github/
-          echo "check our workspace"
-          ls -la __w/newrelic-php-agent/newrelic-php-agent/
 
       - name: Test call of release_build.sh
         if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' }}
         run: |
           echo "This is CentOS 8, calling phpvm.bash, release_build.sh"
-          source php-build-scripts/php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
+          source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
           ./.github/docker/linux/release_build.sh
 
       # Check ENV variables
