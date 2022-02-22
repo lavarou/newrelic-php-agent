@@ -129,11 +129,16 @@ jobs:
           ls -la opt/nr/
           ls -la github/
 
+      - name: Test call phpvm.bash
+        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' }}
+        run: |
+          echo "This is CentOS 8, calling phpvm.bash"
+          source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
+
       - name: Test call of release_build.sh
         if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' }}
         run: |
-          echo "This is CentOS 8, calling phpvm.bash, release_build.sh"
-          source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
+          echo "This is CentOS 8, calling release_build.sh"
           ./.github/docker/linux/release_build.sh
 
       # Check ENV variables
