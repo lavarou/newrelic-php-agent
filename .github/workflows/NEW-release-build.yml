@@ -88,10 +88,26 @@ jobs:
         # Check the arch for the new docker images
         arch: [x64, x86]
     steps:
+      # GHA: We need to also checkout the build script repo
+      # Per Amber, run the source command for eavh version of PHP:
+      # source [WHEREVERYOUPUTBUILDSCRIPTS]/php-build-scripts/bin/phpvm.bash change <PHP_VER>
+      # New workflow_trigger action section
+
       - name: Checkout PHP Agent Repo
         uses: actions/checkout@v2
         with:
           ref: ${{ github.event.client_payload.ref }}
+
+      - name: Checkout build scripts repository
+        uses: actions/checkout@v2
+        with:
+          repository: newrelic/php-agent-php-build-scripts
+          ref: master
+          # GHA: Check for token
+          token: ${{ secrets.ACTIONS_TOKEN }}
+          path: php-build-scripts
+
+      # This might have to exist within ".github"
       # GHA No need to build these images? everything should be installed
       # - name: Build Custom Docker Image
       #   run: docker build --build-arg ARCH=$ARCH --build-arg PHP_VER=$PHP_VER --build-arg BUILD_TYPE=$BUILD_TYPE -f ./.github/docker/${OS}/${ARCH}/Dockerfile -t $image_name .
@@ -108,8 +124,8 @@ jobs:
       - name: Test call of release_build.sh
         if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' }}
         run: |
-          echo "This is CentOS 8, calling release_build.sh"
-          yum install -y php-devel
+          echo "This is CentOS 8, calling phpvm.bash, release_build.sh"
+          source php-build-scripts/php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
           ./.github/docker/linux/release_build.sh
 
       # Check ENV variables
