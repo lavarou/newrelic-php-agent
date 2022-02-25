@@ -86,8 +86,7 @@ jobs:
         php_ver: ['7.0']
         # GHA we'll need to exclude some combinations I believe
         # Check the arch for the new docker images
-        # arch: [x64, x86]
-        arch: [x64]
+        arch: [x64, x86]
     steps:
       # GHA: We need to also checkout the build script repo
       # Per Amber, run the source command for eavh version of PHP:
@@ -130,6 +129,7 @@ jobs:
           ls -la opt/nr/
           ls -la github/
 
+      # GHA: Spme path issues need resolving
       - name: Test call phpvm.bash
         if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
         run: |
@@ -139,19 +139,10 @@ jobs:
           echo "Where is phpize?"
           find / -name phpize
           whereis phpize
-
-      - name: Fix Failed to download metadata for repo
-        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
-        run: |
-          set -x
-          echo "This is CentOS 8, calling phpvm.bash"
-          source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
-          echo "Where is phpize?"
-          find / -name phpize
-          whereis phpize
+          sudo ln -s /usr/local/bin/phpize /opt/nr/php/"${PHP_VER}"/bin/phpize
 
       - name: Test call of release_build.sh
-        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' }}
+        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
         run: |
           echo "This is CentOS 8, calling release_build.sh"
           ./.github/docker/linux/release_build.sh
@@ -159,6 +150,7 @@ jobs:
       # Check ENV variables
       # GHA: Check for IMAGE_OS value per matix run
       - name: Check environmental variables
+        if: ${{ always }}
         run: printenv | sort -f
 
 
