@@ -86,7 +86,8 @@ jobs:
         php_ver: ['7.0']
         # GHA we'll need to exclude some combinations I believe
         # Check the arch for the new docker images
-        arch: [x64, x86]
+        # arch: [x64, x86]
+        arch: [x64]
     steps:
       # GHA: We need to also checkout the build script repo
       # Per Amber, run the source command for eavh version of PHP:
