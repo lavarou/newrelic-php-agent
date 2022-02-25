@@ -130,7 +130,7 @@ jobs:
           ls -la github/
 
       - name: Test call phpvm.bash
-        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' &&  matrix.arch == 'x64' }}
+        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
         run: |
           set -x
           echo "This is CentOS 8, calling phpvm.bash"
@@ -140,7 +140,7 @@ jobs:
           whereis phpize
 
       - name: Fix Failed to download metadata for repo
-        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' &&  matrix.arch == 'x64' }}
+        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
         run: |
           set -x
           echo "This is CentOS 8, calling phpvm.bash"
