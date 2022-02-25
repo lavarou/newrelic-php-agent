@@ -150,7 +150,7 @@ jobs:
       # Check ENV variables
       # GHA: Check for IMAGE_OS value per matix run
       - name: Check environmental variables
-        if: ${{ always }}
+        if: ${{ always() }}
         run: printenv | sort -f
 
 
