@@ -139,7 +139,7 @@ jobs:
           echo "Where is phpize?"
           find / -name phpize
           whereis phpize
-          sudo ln -s /usr/local/bin/phpize /opt/nr/php/"${PHP_VER}"/bin/phpize
+          sudo ln -s /opt/nr/php/"${PHP_VER}"/bin/phpize /usr/local/bin/phpize
 
       - name: Test call of release_build.sh
         if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
