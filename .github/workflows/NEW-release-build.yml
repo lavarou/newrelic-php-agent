@@ -131,7 +131,8 @@ jobs:
           ls -la github/
 
       # GHA: Spme path issues need resolving
-      - name: Test call phpvm.bash
+      # GHA: We may have to run this and build-release in same step
+      - name: 'Test call phpvm.bash, then build-release.sh'
         if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
         run: |
           set -x
@@ -141,12 +142,14 @@ jobs:
           find / -name phpize
           whereis phpize
           sudo ln -s /opt/nr/php/"${PHP_VER}"/bin/phpize /usr/local/bin/phpize
-
-      - name: Test call of release_build.sh
-        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
-        run: |
           echo "This is CentOS 8, calling release_build.sh"
           ./.github/docker/linux/release_build.sh
+
+      # - name: Test call of release_build.sh
+      #   if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
+      #   run: |
+      #     echo "This is CentOS 8, calling release_build.sh"
+      #     ./.github/docker/linux/release_build.sh
 
       # Check ENV variables
       # GHA: Check for IMAGE_OS value per matix run
