@@ -16,7 +16,8 @@ on:
   # GHA only using this for testing
   push:
     branches:
-      - gha-testing
+      # - gha-testing
+      - gha-dev
   #
   # Run this workflow manually from the Actions tab or using the API
   #
@@ -97,7 +98,8 @@ jobs:
       - name: Checkout PHP Agent Repo
         uses: actions/checkout@v2
         with:
-          ref: ${{ github.event.client_payload.ref }}
+          # ref: ${{ github.event.client_payload.ref }}
+          ref: gha-dev
 
       - name: Checkout build scripts repository
         uses: actions/checkout@v2
