@@ -98,8 +98,8 @@ jobs:
       - name: Checkout PHP Agent Repo
         uses: actions/checkout@v2
         with:
-          # ref: ${{ github.event.client_payload.ref }}
-          ref: gha-dev
+          ref: ${{ github.event.client_payload.ref }}
+          # ref: dev
 
       - name: Checkout build scripts repository
         uses: actions/checkout@v2
