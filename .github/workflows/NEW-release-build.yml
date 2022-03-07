@@ -134,7 +134,9 @@ jobs:
 
       - name: Add the "opt/nr" path
         run: |
-          echo "/opt/nr/php/"${PHP_VER}"/bin" >> $GITHUB_PATH
+          echo "/opt/nr/php/${PHP_VER}/bin" >> $GITHUB_PATH
+          echo "/opt/nr/php/${PHP_VER}/bin/phpize" >> $GITHUB_PATH
+          echo "/opt/nr/php/${PHP_VER}/bin/php-config" >> $GITHUB_PATH
 
       # GHA: Spme path issues need resolving
       # GHA: We may have to run this and build-release in same step
@@ -144,7 +146,10 @@ jobs:
           set -x
           echo "This is CentOS 8, calling phpvm.bash"
           source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
-          sudo ln -s /opt/nr/php/"${PHP_VER}"/bin/phpize /usr/local/bin/phpize
+          echo "Where is phpize?"
+          find / -name phpize
+          whereis phpize
+          # sudo ln -s /opt/nr/php/"${PHP_VER}"/bin/phpize /usr/local/bin/phpize
           echo "This is CentOS 8, calling release_build.sh"
           ./.github/docker/linux/release_build.sh
 
