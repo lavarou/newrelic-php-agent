@@ -149,9 +149,12 @@ jobs:
           echo "Where is phpize?"
           find / -name phpize
           whereis phpize
-          # sudo ln -s /opt/nr/php/"${PHP_VER}"/bin/phpize /usr/local/bin/phpize
           echo "This is CentOS 8, calling release_build.sh"
           ./.github/docker/linux/release_build.sh
+
+      - name: Check content of releases directory
+        if: ${{ always() }}
+        run: ls -la releases/
 
       # - name: Test call of release_build.sh
       #   if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
