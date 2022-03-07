@@ -140,9 +140,8 @@ jobs:
           set -x
           echo "This is CentOS 8, calling phpvm.bash"
           source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
-          echo "Where is php-config?"
-          find / -name php-config
-          whereis php-config
+          echo "Add the opt/nr path to the step"
+          echo "/opt/nr/php/"${PHP_VER}"/bin" >> $GITHUB_PATH
           echo "Where is phpize?"
           find / -name phpize
           whereis phpize
