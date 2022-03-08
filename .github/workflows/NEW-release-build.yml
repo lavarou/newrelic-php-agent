@@ -136,7 +136,6 @@ jobs:
 
       - name: Add the "opt/nr" path, install packages
         run: |
-          sudo apt install tree
           echo "/opt/nr/php/${PHP_VER}/bin" >> $GITHUB_PATH
           echo "/opt/nr/php/${PHP_VER}/bin/phpize" >> $GITHUB_PATH
           echo "/opt/nr/php/${PHP_VER}/bin/php-config" >> $GITHUB_PATH
