@@ -6,12 +6,12 @@
 #
 
 # GHA: variables added for local testing
-# PHP_VER='7.0'
-# ARCH='x64'
+PHP_VER='7.1'
+ARCH='x64'
 export PATH=/opt/nr/php/${PHP_VER}/bin:$PATH
 # export PATH=/root/.nvm/versions/node/v12.18.3/bin:$PATH
 echo php "${PHP_VER}"
 echo arch "${ARCH}"
 make -j $(nproc) clean
-# make -r -j $(nproc) release-"${PHP_VER}"-gha "OPTIMIZE=1" "ARCH=${ARCH}"
-PHPS="${PHP_VER}" make -r -j $(nproc) release "OPTIMIZE=1" "ARCH=${ARCH}"
+make -r -j $(nproc) release-"${PHP_VER}"-gha "OPTIMIZE=1" "ARCH=${ARCH}"
+# PHPS="${PHP_VER}" make -r -j $(nproc) release "OPTIMIZE=1" "ARCH=${ARCH}"
