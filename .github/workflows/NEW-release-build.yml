@@ -105,7 +105,9 @@ jobs:
         uses: actions/checkout@v2
         with:
           repository: newrelic/php-agent-php-build-scripts
-          ref: master
+          # Chaging ref temporarily for testing
+          # ref: master
+          ref: gha-dev
           # GHA: Check for token
           token: ${{ secrets.ACTIONS_TOKEN }}
           path: php-build-scripts
