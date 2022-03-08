@@ -126,13 +126,13 @@ jobs:
           echo "current directory is " $(pwd)
           ls -la php-build-scripts/
 
-      - name: Build and Test
-        run: |
-          echo "current directory is " $(pwd)
-          ls -la
-          cd / && ls -la
-          ls -la opt/nr/
-          ls -la github/
+      # - name: Build and Test
+      #   run: |
+      #     echo "current directory is " $(pwd)
+      #     ls -la
+      #     cd / && ls -la
+      #     ls -la opt/nr/
+      #     ls -la github/
 
       - name: Add the "opt/nr" path
         run: |
@@ -155,8 +155,10 @@ jobs:
           ./.github/docker/linux/release_build.sh
 
       - name: Check content of releases directory
-        if: ${{ always() }}
-        run: ls -la releases/
+        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
+        run: |
+          tree releases/
+          ls -laR releases/
 
       # - name: Test call of release_build.sh
       #   if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
@@ -171,12 +173,13 @@ jobs:
         run: printenv | sort -f
 
 
-      # - name: Save build artifacts
-      #   uses: actions/upload-artifact@v2
-      #   with:
-      #     name: ${{ matrix.php_ver }}binaries
-      #     path: releases
-      #     if-no-files-found: error
+      - name: Save build artifacts
+        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ matrix.php_ver }}binaries
+          path: releases
+          if-no-files-found: error
 
   # GHA renamed for better readability ⇓
   # combine-artifacts:
