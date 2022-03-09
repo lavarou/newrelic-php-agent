@@ -181,7 +181,7 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           # name: ${{ matrix.php_ver }}binaries
-          name: ${{ matrix.os }}-${{ matrix.php_ver }}${{ matrix.arch }}binaries
+          name: ${{ matrix.image_os }}-${{ matrix.php_ver }}-${{ matrix.arch }}binaries
           path: releases
           if-no-files-found: error
 
