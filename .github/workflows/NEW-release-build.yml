@@ -82,7 +82,7 @@ jobs:
       matrix:
         registry: [mycirrus]
         # image_os: ['newrelic:nr-alpine-3.14--1.0', 'newrelic:nr-alpine3.4-1.0', 'newrelic:nr-centos8-1.0', 'newrelic:nr-centos7-1.1']
-        image_os: ['newrelic:nr-centos8-1.0']
+        image_os: ['newrelic:nr-centos8-1.0', 'newrelic:nr-centos7-1.1']
         os: [linux]
         php_ver: ['7.0', '7.1', '7.2', '7.3', '7.4', '8.0', '8.0-zts']
         # php_ver: ['7.1']
@@ -177,7 +177,8 @@ jobs:
         if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ matrix.php_ver }}binaries
+          # name: ${{ matrix.php_ver }}binaries
+          name: ${{ matrix.os }}-${{ matrix.php_ver }}${{ matrix.arch }}binaries
           path: releases
           if-no-files-found: error
 
