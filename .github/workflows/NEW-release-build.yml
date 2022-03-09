@@ -88,7 +88,7 @@ jobs:
         # php_ver: ['7.1']
         # GHA we'll need to exclude some combinations I believe
         # Check the arch for the new docker images
-        arch: [x64, x86]
+        arch: [x64]
     steps:
       # GHA: We need to also checkout the build script repo
       # Per Amber, run the source command for eavh version of PHP:
@@ -144,20 +144,20 @@ jobs:
       # GHA: We may have to run this and build-release in same step
       - name: 'Test call phpvm.bash, then build-release.sh'
         # if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
-        if: ${{ matrix.arch == 'x64' }}
+        # if: ${{ matrix.arch == 'x64' }}
         run: |
           set -x
-          echo "This is CentOS 8, calling phpvm.bash"
+          echo "Calling phpvm.bash"
           source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
           echo "Where is phpize?"
           find / -name phpize
           whereis phpize
-          echo "This is CentOS 8, calling release_build.sh"
+          echo "Calling release_build.sh"
           ./.github/docker/linux/release_build.sh
 
       - name: Check content of releases directory
         # if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
-        if: ${{ matrix.arch == 'x64' }}
+        # if: ${{ matrix.arch == 'x64' }}
         run: |
           tree releases/
           ls -laR releases/
@@ -175,22 +175,23 @@ jobs:
         run: printenv | sort -f
 
       # Rename matrix item to remove problem characers
-      - name: Rename Matrix item
-        if: ${{ failure() || success() }}
-        env:
-          MATRIX_IMAGE: ${{ matrix.image_os }}
-        run: |
-          MATRIX_IMAGE=$(echo ${MATRIX_IMAGE} | sed 's|:|-|g')
-          echo "MATRIX_IMAGE="${MATRIX_IMAGE}"" >> $GITHUB_ENV
+      # GHA only required for custom artifact naming
+      # - name: Rename Matrix item
+      #   if: ${{ failure() || success() }}
+      #   env:
+      #     MATRIX_IMAGE: ${{ matrix.image_os }}
+      #   run: |
+      #     MATRIX_IMAGE=$(echo ${MATRIX_IMAGE} | sed 's|:|-|g')
+      #     echo "MATRIX_IMAGE="${MATRIX_IMAGE}"" >> $GITHUB_ENV
 
 
       - name: Save build artifacts
         # if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
-        if: ${{ matrix.arch == 'x64' }}
+        # if: ${{ matrix.arch == 'x64' }}
         uses: actions/upload-artifact@v2
         with:
-          # name: ${{ matrix.php_ver }}binaries
-          name: ${{ env.MATRIX_IMAGE }}-${{ matrix.php_ver }}-${{ matrix.arch }}binaries
+          name: ${{ matrix.php_ver }}binaries
+          # name: ${{ env.MATRIX_IMAGE }}-${{ matrix.php_ver }}-${{ matrix.arch }}binaries
           path: releases
           if-no-files-found: error
 
