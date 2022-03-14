@@ -6,8 +6,8 @@
 #
 
 # GHA: variables added for local testing
-# PHP_VER='7.1'
-# ARCH='x64'
+PHP_VER='7.1'
+ARCH='x64'
 export PATH=/opt/nr/php/${PHP_VER}/bin:$PATH
 echo php "${PHP_VER}"
 echo arch "${ARCH}"
