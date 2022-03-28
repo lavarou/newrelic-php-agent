@@ -161,6 +161,7 @@ jobs:
         if: ${{ matrix.image_os == 'newrelic:nr-alpine3.4-1.0' }}
         # if: ${{ matrix.arch == 'x64' }}
         run: |
+          cd "${GITHUB_WORKSPACE}"
           set -x
           echo "Calling phpvm.bash"
           source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
