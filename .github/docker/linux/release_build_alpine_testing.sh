@@ -11,6 +11,6 @@
 export PATH=/opt/nr/php/${PHP_VER}/bin:$PATH
 echo php "${PHP_VER}"
 echo arch "${ARCH}"
-make -j $(nproc) clean
+# make -j $(nproc) clean
 # make -r -j $(nproc) release-"${PHP_VER}"-gha "OPTIMIZE=1" "ARCH=${ARCH}"
 PHPS="${PHP_VER}" make -r -j $(nproc) release "OPTIMIZE=1" "ARCH=${ARCH}"
