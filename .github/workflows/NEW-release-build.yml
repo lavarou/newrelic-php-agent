@@ -145,7 +145,7 @@ jobs:
       # GHA: Spme path issues need resolving
       # GHA: We may have to run this and build-release in same step
       - name: 'Test call phpvm.bash, then build-release.sh'
-        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' || ${{ matrix.image_os == 'newrelic:nr-centos7-1.1' }}
+        if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' || matrix.image_os == 'newrelic:nr-centos7-1.1' }}
         # if: ${{ matrix.arch == 'x64' }}
         run: |
           set -x
