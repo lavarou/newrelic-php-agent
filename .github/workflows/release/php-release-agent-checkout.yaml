@@ -25,7 +25,8 @@ jobs:
 
     # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+      # Checks-out your repository under $GITHUB_WORKSPACE, 
+      # so your job can access it
       - name: Checkout PHP Agent Repo
         uses: actions/checkout@v2
         with:
@@ -35,7 +36,7 @@ jobs:
       - name: Checkout build scripts repository
         uses: actions/checkout@v2
         with:
-          repository: newrelic/php-agent-php-build-
+          repository: newrelic/php-agent-internal
           # Change ref temporarily for testing?
           ref: R9.20
           # GHA: Check for token
@@ -70,6 +71,17 @@ jobs:
           # echo off
           # echo "${GIT_BRANCH#*/}" > branch.txt
 
+      # GHA: Do we use this method?
+      # Upload the "artifacts":
+      - name: "Upload combined content/code from both agent and internal agent"
+        id: ${{ github.workflow }}-repo-artifacts
+        uses: actions/upload-artifact@v2
+        with:
+          name: ${{ github.workflow }}-repo-artifacts
+          path: |
+            **
+
+      # GHA: We need to trigger php-release-agent.yml
       # Testing accessing the newrelic-actions repo
       # Determine values we need to pass and then include in
       # cakedf repo's workflow_dispatch configs
