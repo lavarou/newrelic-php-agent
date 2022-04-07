@@ -204,34 +204,39 @@ jobs:
           echo "MATRIX_IMAGE="${MATRIX_IMAGE}"" >> $GITHUB_ENV
 
 
+      # GHA: We need to find a more efficient way of saving these
+      # Will we have to download abd comine as done in the following step?
+      # Or the aggregation can happen in workflows?
       - name: Save build artifacts
         # if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' && matrix.arch == 'x64' }}
         # if: ${{ matrix.arch == 'x64' }}
         uses: actions/upload-artifact@v2
         with:
           # name: ${{ matrix.php_ver }}binaries
+          # name: ${{ env.MATRIX_IMAGE }}-${{ matrix.php_ver }}-${{ matrix.arch }}binaries
+          # path: releases
           name: ${{ env.MATRIX_IMAGE }}-${{ matrix.php_ver }}-${{ matrix.arch }}binaries
-          path: releases
+          path: releases/
           if-no-files-found: error
 
   # GHA renamed for better readability ⇓
-  # combine-artifacts:
-  #   if: ${{ always() }}
-  #   runs-on: ubuntu-latest
-  #   name: Combine artifacts from matrix build
-  #   needs: agent_release
-  #   steps:
-  #     - name: Create directory
-  #       run: mkdir releases
-  #     - name: Download to directory
-  #       uses: actions/download-artifact@v2
-  #       with:
-  #         path: releases
-  #     - run: sudo apt install tree
-  #     - run: tree
-  #     - name: Upload artifacts
-  #       uses: actions/upload-artifact@v2
-  #       with:
-  #         name: $GITHUB_SHA
-  #         path: releases
-  #         if-no-files-found: error
+  combine-artifacts:
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    name: Combine artifacts from matrix build
+    needs: agent_release_by_image
+    steps:
+      - name: Create directory
+        run: mkdir releases
+      - name: Download to directory
+        uses: actions/download-artifact@v2
+        with:
+          path: releases
+      - run: sudo apt install tree
+      - run: tree releases/
+      # - name: Upload artifacts
+      #   uses: actions/upload-artifact@v2
+      #   with:
+      #     name: $GITHUB_SHA
+      #     path: releases
+      #     if-no-files-found: error
