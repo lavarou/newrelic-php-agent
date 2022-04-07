@@ -232,8 +232,15 @@ jobs:
         uses: actions/download-artifact@v2
         with:
           path: releases
-      - run: sudo apt install tree
-      - run: tree releases/
+      # - run: sudo apt install tree
+      - run: |
+          tree releases/
+          mkdir releases/alpine releases/centos releases/amr64
+          cp -R newrelic-nr-alpine*/* alpine/
+          cp -R newrelic-nr-centos*/* centos/
+          rm -rf newrelic-nr-alpine*/ newrelic-nr-centos*/
+          # cp -R newrelic-nr-arm64*/* arm64/
+          tree releases/
       # - name: Upload artifacts
       #   uses: actions/upload-artifact@v2
       #   with:
