@@ -5,9 +5,11 @@
 
 #
 # This is the workflow to do a release build.
+# GHA: 04/07: This is actually replacing the php-release-agent job in jenkins.
+# We do not need the php-release-agent-checkout job.
 #
 ---
-name: NEW release_CI
+name: 'NEW release_CI (php-release-agent)'
 
 #
 # Control when the action will run.
@@ -136,6 +138,7 @@ jobs:
       #     ls -la opt/nr/
       #     ls -la github/
 
+      # GHA: This step shouldn't be necessary with the phpvm.bash
       - name: Add the "opt/nr" path, install packages
         run: |
           echo "/opt/nr/php/${PHP_VER}/bin" >> $GITHUB_PATH

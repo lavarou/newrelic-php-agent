@@ -2,6 +2,7 @@
 # php-release-agent-checkout
 # https://phpagent-build.pdx.vm.datanerd.us/job/php-release-agent/configure
 
+---
 
 name: php-release-agent
 
@@ -81,7 +82,7 @@ jobs:
 
       # Runs a single command using the runners shell
       # There is a build.sh in a .hudson directory that is called here.
-      # GHA: Ask Amber about where this build script resides
+      # GHA: This is the step being replaced by the 
       - name: Execute build.sh
         run: |
           # cp -rv visible.git .git
