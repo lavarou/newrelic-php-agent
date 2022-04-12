@@ -102,13 +102,13 @@ jobs:
       # New workflow_trigger action section
 
       - name: Checkout PHP Agent Repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           # ref: ${{ github.event.client_payload.ref }}
           ref: gha-dev
 
       - name: Checkout build scripts repository
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
           repository: newrelic/php-agent-php-build-scripts
           # Chaging ref temporarily for testing
