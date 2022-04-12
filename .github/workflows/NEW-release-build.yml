@@ -86,7 +86,7 @@ jobs:
         # image_os: ['newrelic:nr-alpine-3.14--1.0', 'newrelic:nr-alpine3.4-1.0', 'newrelic:nr-centos8-1.0', 'newrelic:nr-centos7-1.1']
         # image_os: ['newrelic:nr-alpine-3.14--1.0', 'newrelic:nr-alpine3.4-1.0']
         # image_os: ['newrelic:nr-centos8-1.0', 'newrelic:nr-centos7-1.1']
-        image_os: ['newrelic:nr-centos8-1.0', 'newrelic:nr-centos7-1.1', 'newrelic:nr-alpine-3.14--1.0', 'newrelic:nr-alpine3.4-1.1']
+        image_os: ['newrelic:nr-centos8-1.1', 'newrelic:nr-centos7-1.2', 'newrelic:nr-alpine-3.14--1.2', 'newrelic:nr-alpine3.4-1.2']
         os: [linux]
         # php_ver: ['7.0', '7.1', '7.2', '7.3', '7.4', '8.0', '8.0-zts']
         php_ver: ['7.0', '7.1']
@@ -235,13 +235,14 @@ jobs:
       # - run: sudo apt install tree
       - run: |
           tree releases/
-          cd releases
+          cd releases/
           mkdir alpine centos arm64
-          cp -R newrelic-nr-alpine*/* alpine/
-          cp -R newrelic-nr-centos*/* centos/
-          rm -rf newrelic-nr-alpine*/ newrelic-nr-centos*/
+          ls -la
+          # cp -R newrelic-nr-alpine*/* alpine/
+          # cp -R newrelic-nr-centos*/* centos/
+          # rm -rf newrelic-nr-alpine*/ newrelic-nr-centos*/
           # cp -R newrelic-nr-arm64*/* arm64/
-          tree releases/
+          # tree releases/
       # - name: Upload artifacts
       #   uses: actions/upload-artifact@v2
       #   with:
