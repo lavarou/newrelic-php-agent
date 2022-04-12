@@ -245,6 +245,15 @@ jobs:
           # rm -rf newrelic-nr-alpine*/ newrelic-nr-centos*/
           # cp -R newrelic-nr-arm64*/* arm64/
           # tree releases/
+      - name: Consolidate per IMAGE_OS
+        # if: ${{ always() }}
+        run: |
+          cd releases/
+          cp -R newrelic-nr-alpine*/* alpine/
+          cp -R newrelic-nr-centos*/* centos/
+          rm -rf newrelic-nr-alpine*/ newrelic-nr-centos*/
+          cd ../ && tree releases/
+
       # - name: Upload artifacts
       #   uses: actions/upload-artifact@v2
       #   with:
