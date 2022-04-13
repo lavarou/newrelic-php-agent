@@ -260,6 +260,6 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ env.GITHUB_SHA }}
+          name: $GITHUB_SHA
           path: releases
           if-no-files-found: error
