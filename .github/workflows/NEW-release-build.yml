@@ -195,8 +195,9 @@ jobs:
         if: ${{ always() }}
         run: printenv | sort -f
 
-      - name: Dump Env Context
-        run: echo env is ${{ toJSON(env) }}
+      # GHA: below fails
+      # - name: Dump Env Context
+      #   run: echo env is ${{ toJSON(env) }}
 
       # Rename matrix item to remove problem characers
       # GHA only required for custom artifact naming
@@ -231,8 +232,8 @@ jobs:
     name: Combine artifacts from matrix build
     needs: agent_release_by_image
     steps:
-      - name: Dump Env Context
-        run: echo env is ${{ toJSON(env) }}
+      # - name: Dump Env Context
+      #   run: echo env is ${{ toJSON(env) }}
 
       - name: Create directory
         run: mkdir releases
@@ -263,9 +264,11 @@ jobs:
           rm -rf newrelic-nr-alpine*/ newrelic-nr-centos*/
           cd ../ && tree releases/
 
+      # GHA: Note the format of GitHub variable reference in contexts
+      # UNDERSCORE REPLACED WITH . SYNTAX
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: testing-only
+          name: ${{ github.sha }}
           path: releases
           if-no-files-found: error
