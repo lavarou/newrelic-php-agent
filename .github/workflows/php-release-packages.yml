@@ -1,17 +1,22 @@
 ---
-# GHA: Jenkins job: 
+# GHA: Jenkins job:
 # https://phpagent-build.pdx.vm.datanerd.us/job/php-release-packages/configure
-# GHA (04/07): This job downloads artifacts generated from the new 
+# GHA (04/07): This job downloads artifacts generated from the new
 # release build workflow (confirm with Amber)
 # We need download the artifacts generated per OS (CentOS, Alpine, AND arm64)
+# GHA We may need to use a workflow_run trigger for this;
+# /home/kenton/repos/github/my-actions/.github/workflows/workflow-2.yaml
 
 name: php-release-packages
 
 # Controls when the action will run.
 on:
   # Triggers the workflow on push or pull request events but only for the main branch
-  push:
-    branches: [ gha-testing ]
+  workflow_run:
+    workflows: ['NEW release_CI (php-release-agent)']
+    branches: [gha-dev]
+    types: ## Review if this is the comperehensive types available
+      - completed
 
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
@@ -74,7 +79,10 @@ jobs:
         uses: dawidd6/action-download-artifact@v2.14.1
         with:
           workflow: NEW-release-build.yml
-          branch: R9.20
+          branch: gha-dev
+          # GHA: We'll add commit here as well?
+          # We might need to grab a workflow run ID
+          # commit:
           # name: php-release-agent-checkout-repo-artifacts
           path: artifacts-centos
           repo: ${{github.repository}}
@@ -86,7 +94,9 @@ jobs:
         uses: dawidd6/action-download-artifact@v2.14.1
         with:
           workflow: NEW-release-build.yml
-          branch: R9.20
+          branch: gha-dev
+          # GHA: We'll add commit here as well
+          # commit:
           # name: php-release-agent-checkout-repo-artifacts
           path: artifacts-arm64
           repo: ${{github.repository}}
@@ -97,5 +107,5 @@ jobs:
           pwd && ls -la
           echo Add other actions to build,
           echo test, and deploy your project.
-          lsb_release -a
+          # lsb_release -a
           ## apt list --installed
