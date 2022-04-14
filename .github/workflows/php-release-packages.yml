@@ -14,7 +14,10 @@ on:
   # Triggers the workflow on push or pull request events but only for the main branch
   workflow_run:
     workflows: ['NEW release_CI (php-release-agent)']
-    branches: [gha-dev]
+    branches:
+      - gha-dev
+      - dev
+      - main
     types: ## Review if this is the comperehensive types available
       - completed
 
