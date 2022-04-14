@@ -272,6 +272,6 @@ jobs:
       - name: Upload artifacts
         uses: actions/upload-artifact@v2
         with:
-          name: ${{ github.sha }}
-          path: releases
+          name: releases-${{ github.sha }}
+          path: releases/
           if-no-files-found: error
