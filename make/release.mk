@@ -55,10 +55,8 @@ endif
 
 
 release: Makefile release-daemon release-installer release-agent release-docs release-scripts | releases/$(RELEASE_OS)/
-# 	echo "${AGENT_VERSION}" > releases/$(RELEASE_OS)/VERSION
-# 	echo "${GIT_COMMIT}" > releases/$(RELEASE_OS)/COMMIT
-	printf '%s\n' "${AGENT_VERSION}" > releases/$(RELEASE_OS)/VERSION
-	printf '%s\n' "${GIT_COMMIT}" > releases/$(RELEASE_OS)/COMMIT
+	printf '%s\n' "$(AGENT_VERSION)" > releases/$(RELEASE_OS)/VERSION
+	printf '%s\n' "$(GIT_COMMIT)" > releases/$(RELEASE_OS)/COMMIT
 
 release-daemon: Makefile daemon | releases/$(RELEASE_OS)/daemon/
 	cp bin/daemon releases/$(RELEASE_OS)/daemon/newrelic-daemon.$(RELEASE_ARCH)
@@ -114,38 +112,32 @@ release-agent: Makefile | releases/$(RELEASE_OS)/agent/$(RELEASE_ARCH)/
 #
 define RELEASE_AGENT_TARGET
 
-# GHA changed below per Amber Sistla
 #
 # Target for non-zts GHA releases.
 #
-release-$1-gha: PHPIZE := phpize
-release-$1-gha: PHP_CONFIG := php-config
+release-$1-gha: PHPIZE := /usr/local/bin/phpize
+release-$1-gha: PHP_CONFIG := /usr/local/bin/php-config
 release-$1-gha: Makefile agent | releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/
 	@cp agent/modules/newrelic.so "releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/newrelic-$2.so"
 	@test -e agent/newrelic.map && cp agent/newrelic.map "releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/newrelic-$2.map" || true
 
-# GHA changed below per Amber Sistla
 #
 # Target for zts GHA releases.
 #
-release-$1-zts-gha: PHPIZE := phpize
-release-$1-zts-gha: PHP_CONFIG := php-config
+release-$1-zts-gha: PHPIZE := /usr/local/bin/phpize
+release-$1-zts-gha: PHP_CONFIG := /usr/local/bin/php-config
 release-$1-zts-gha: Makefile agent | releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/
 	@cp agent/modules/newrelic.so "releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/newrelic-$2-zts.so"
 	 @test -e agent/newrelic.map && cp agent/newrelic.map "releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/newrelic-$2-zts.map" || true
 
-# release-$1-no-zts: PHPIZE := /opt/nr/lamp/bin/phpize-$1-no-zts
-# release-$1-no-zts: PHP_CONFIG := /opt/nr/lamp/bin/php-config-$1-no-zts
-release-$1-no-zts: PHPIZE := /opt/nr/bin/phpize-$1-no-zts
-release-$1-no-zts: PHP_CONFIG := /opt/nr/bin/php-config-$1-no-zts
+release-$1-no-zts: PHPIZE := /opt/nr/lamp/bin/phpize-$1-no-zts
+release-$1-no-zts: PHP_CONFIG := /opt/nr/lamp/bin/php-config-$1-no-zts
 release-$1-no-zts: Makefile agent | releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/
 	@cp agent/modules/newrelic.so "releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/newrelic-$2.so"
 	@test -e agent/newrelic.map && cp agent/newrelic.map "releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/newrelic-$2.map" || true
 
-# release-$1-zts: PHPIZE := /opt/nr/lamp/bin/phpize-$1-zts
-# release-$1-zts: PHP_CONFIG := /opt/nr/lamp/bin/php-config-$1-zts
-release-$1-zts: PHPIZE := /opt/nr/bin/phpize-$1-zts
-release-$1-zts: PHP_CONFIG := /opt/nr/bin/php-config-$1-zts
+release-$1-zts: PHPIZE := /opt/nr/lamp/bin/phpize-$1-zts
+release-$1-zts: PHP_CONFIG := /opt/nr/lamp/bin/php-config-$1-zts
 release-$1-zts: Makefile agent | releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/
 	@cp agent/modules/newrelic.so "releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/newrelic-$2-zts.so"
 	@test -e agent/newrelic.map && cp agent/newrelic.map "releases/$$(RELEASE_OS)/agent/$$(RELEASE_ARCH)/newrelic-$2-zts.map" || true
