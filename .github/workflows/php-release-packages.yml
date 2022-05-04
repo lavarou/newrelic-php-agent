@@ -156,6 +156,16 @@ jobs:
           cp -R combined-artifacts/combined-releases-*/centos/* releases/
           tree releases/
 
+      # Script required the tct extension
+      - name: Asset renaming as required
+        run: |
+          mv releases/linux/LICENSE releases/linux/LICENSE.txt
+
+      # Install any remaining dependencies
+      - name: Install any remaining dependencies
+        run: |
+          yum install -y screen
+
       # Get the directories ready for buid-redhat.sh
       - name: Change gpg
         run: |
@@ -215,10 +225,20 @@ jobs:
           cp -R combined-artifacts/combined-releases-*/centos/* releases/
           tree releases/
 
+      - name: Build/Runner dependecies
+        run: |
+          sudo apt -y install devscripts build-essential lintian debhelper
+
       - name: Build Debian
         run: |
           echo "Calling build-debian.sh"
-          # ./packaging/build-debian.sh
+          ./packaging/build-debian.sh
+
+      # - name: "Attempt to resolve dpkg-checkbuilddeps: error: Unmet build dependencies: debhelper"
+      #   if: ${{ failure() }}
+      #   run: |
+      #     sudo apt install \
+      #     -y $(dpkg-checkbuilddeps 2>&1 | sed -e 's/dpkg-checkbuilddeps:\serror:\sUnmet build dependencies: //g' -e  's/[\(][^)]*[\)] //g')
 
       # Check for new content in releases
       - name: Check for new content in releases
@@ -270,7 +290,7 @@ jobs:
       - name: Build Tar
         run: |
           echo "Calling build-tgz.sh"
-          # ./packaging/build-tgz.sh
+          ./packaging/build-tgz.sh
 
       # Check for new content in releases
       - name: Check for new content in releases
