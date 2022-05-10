@@ -90,7 +90,7 @@ jobs:
         image_os: ['newrelic:nr-centos8-1.1', 'newrelic:nr-alpine3.4-1.1']
         os: [linux]
         # php_ver: ['7.0', '7.1', '7.2', '7.3', '7.4', '8.0', '8.0-zts']
-        php_ver: ['7.0']
+        php_ver: ['5.5', '5.6', '7.0']
         # GHA we'll need to exclude some combinations I believe
         # Check the arch for the new docker images
         arch: [x64]
@@ -104,7 +104,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           # ref: ${{ github.event.client_payload.ref }}
-          ref: gha-dev
+          ref: main
 
       - name: Checkout build scripts repository
         uses: actions/checkout@v3
@@ -154,7 +154,7 @@ jobs:
 
       # GHA: Spme path issues need resolving
       # GHA: We may have to run this and build-release in same step
-      - name: 'Test call phpvm.bash, then build-release.sh'
+      - name: 'Test call phpvm.bash, then release_build_gha.sh'
         # if: ${{ matrix.image_os == 'newrelic:nr-centos8-1.0' || matrix.image_os == 'newrelic:nr-centos7-1.1' }}
         # if: ${{ matrix.arch == 'x64' }}
         run: |
@@ -164,7 +164,7 @@ jobs:
           echo "Where is phpize?"
           find / -name phpize
           whereis phpize
-          echo "Calling release_build.sh"
+          echo "Calling release_build_gha.sh"
           ./.github/docker/linux/release_build_gha.sh
 
       # - name: 'Test call phpvm.bash, then build-release.sh - Alpine'
