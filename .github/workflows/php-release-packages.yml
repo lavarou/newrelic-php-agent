@@ -199,7 +199,7 @@ jobs:
           curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg | sudo dd of=/usr/share/keyrings/githubcli-archive-keyring.gpg
           echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null
           sudo apt update
-          sudo apt-get -y --force-yes install gh git
+          sudo apt-get -y --force-yes install gh git tree
           gh --version
           git --version
 
@@ -241,11 +241,11 @@ jobs:
           sudo apt -y install devscripts build-essential lintian debhelper
 
       # GHA: Checking pcre error
-      # - name: Build/Runner dependecies 2
-      #   run: |
-      #     sudo find / -name libpcre.so.*
-      #     sudo apt-get install libpcre3-dev
-      #     sudo find / -name libpcre.so.*
+      - name: Build/Runner dependecies 2
+        run: |
+          sudo find / -name libpcre.so.*
+          # sudo apt-get install libpcre3-dev
+          # sudo find / -name libpcre.so.*
 
       - name: Build Debian
         run: |
@@ -305,10 +305,15 @@ jobs:
           cp -R combined-artifacts/combined-releases-*/centos/* releases/
           tree releases/
 
+      # Script required the tct extension
+      - name: Asset renaming as required
+        run: |
+          mv releases/linux/LICENSE releases/linux/LICENSE.txt
+
       - name: Build Tar
         run: |
           echo "Calling build-tgz.sh"
-          ./packaging/build-tgz.sh
+          ./packaging/build-tgz.sh linux
 
       # Check for new content in releases
       - name: Check for new content in releases
