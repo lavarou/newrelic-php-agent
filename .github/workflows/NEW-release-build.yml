@@ -326,8 +326,8 @@ jobs:
           set -x
           echo "Calling phpvm.bash"
           source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
-          echo "Where is phpize?"
-          find / -name phpize
+          # echo "Where is phpize?"
+          # find / -name phpize
           whereis phpize
           echo "Calling release_build_gha.sh"
           ./.github/docker/linux/release_build_gha.sh
