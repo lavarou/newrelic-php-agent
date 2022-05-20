@@ -27,6 +27,15 @@ on:
   # Run this workflow manually from the Actions tab or using the API
   #
   workflow_dispatch:
+    inputs:
+      ARM64:
+        description: "Optionally Run the arm64 job"
+        required: false
+        default: false
+      BUILD_NUMBER:
+        description: "BUILD_NUMBER to pass to workflow"
+        required: false
+        default: ${{ github.run_number }}
 
 jobs:
   # GHA might be better to create sperarate jobs per image?
@@ -231,7 +240,11 @@ jobs:
           path: releases/
           if-no-files-found: error
 
+  # GHA: Need to a job to provision the arm64 runner
+
   agent_release_arm64:
+    # GHA: Do not tun this job if false
+    if: ${{ github.event.inputs.ARM64 ==  true }}
     env:
       # GHA we need to add the various PHP versions supported to PHP_VER
       # Confirm that these are passed to the container(s)
@@ -403,7 +416,7 @@ jobs:
     name: Combine artifacts from matrix build
     needs:
       - agent_release_by_image
-      - agent_release_arm64
+      # - agent_release_arm64
     steps:
       # - name: Dump Env Context
       #   run: echo env is ${{ toJSON(env) }}
