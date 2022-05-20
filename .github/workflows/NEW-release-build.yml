@@ -35,7 +35,7 @@ on:
       BUILD_NUMBER:
         description: "BUILD_NUMBER to pass to workflow"
         required: false
-        default: ${{ github.run_number }}
+        default: ""
 
 jobs:
   # GHA might be better to create sperarate jobs per image?
