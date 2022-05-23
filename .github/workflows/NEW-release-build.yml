@@ -36,6 +36,10 @@ on:
         description: "BUILD_NUMBER to pass to workflow"
         required: false
         default: ""
+      BIGCHANGE:
+        description: "BUILD_NUMBER to pass to workflow"
+        required: false
+        default: false
 
 jobs:
   # GHA might be better to create sperarate jobs per image?
@@ -241,39 +245,41 @@ jobs:
           if-no-files-found: error
 
   # GHA: Need to a job to provision the arm64 runner
-  # start-runner:
-  #   name: Start self-hosted EC2 runner
-  #   runs-on: ubuntu-latest
-  #   outputs:
-  #     label: ${{ steps.start-ec2-runner.outputs.label }}
-  #     ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
-  #   steps:
-  #     - name: Configure AWS credentials
-  #       uses: aws-actions/configure-aws-credentials@v1
-  #       with:
-  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #         aws-region: ${{ secrets.AWS_REGION }}
-  #     - name: Start EC2 runner
-  #       id: start-ec2-runner
-  #       uses: machulav/ec2-github-runner@v2
-  #       with:
-  #         mode: start
-  #         github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
-  #         ec2-image-id: ami-123
-  #         ec2-instance-type: t3.nano
-  #         subnet-id: subnet-123
-  #         security-group-id: sg-123
-  #         iam-role-name: my-role-name # optional, requires additional permissions
-  #         aws-resource-tags: > # optional, requires additional permissions
-  #           [
-  #             {"Key": "Name", "Value": "ec2-github-runner"},
-  #             {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
-  #           ]
+  start-runner:
+    if: ${{ github.event.inputs.ARM64 ==  true }}
+    name: Start self-hosted EC2 runner
+    runs-on: ubuntu-latest
+    outputs:
+      label: ${{ steps.start-ec2-runner.outputs.label }}
+      ec2-instance-id: ${{ steps.start-ec2-runner.outputs.ec2-instance-id }}
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v1
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Start EC2 runner
+        id: start-ec2-runner
+        uses: machulav/ec2-github-runner@v2
+        with:
+          mode: start
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          ec2-image-id: ami-123
+          ec2-instance-type: t3.nano
+          subnet-id: subnet-123
+          security-group-id: sg-123
+          iam-role-name: my-role-name  # optional, requires additional permissions
+          aws-resource-tags: > # optional, requires additional permissions
+            [
+              {"Key": "Name", "Value": "ec2-github-runner"},
+              {"Key": "GitHubRepository", "Value": "${{ github.repository }}"}
+            ]
 
   agent_release_arm64:
     # GHA: Do not tun this job if false
     if: ${{ github.event.inputs.ARM64 ==  true }}
+    needs: start-runner
     env:
       # GHA we need to add the various PHP versions supported to PHP_VER
       # Confirm that these are passed to the container(s)
@@ -353,11 +359,12 @@ jobs:
           echo "/opt/nr/php/${PHP_VER}/bin/phpize" >> $GITHUB_PATH
           echo "/opt/nr/php/${PHP_VER}/bin/php-config" >> $GITHUB_PATH
 
-      # Add ENV variables required in makefile
+      # Add ENV variables required
       - name: Add ENV variables required in makefile
         run: |
           echo "AGENT_VERSION="${GITHUB_RUN_NUMBER}"" >> $GITHUB_ENV
           echo "GIT_COMMIT="${GITHUB_SHA}"" >> $GITHUB_ENV
+          echo "BUILD_NUMBER="${GITHUB_RUN_NUMBER}"" >> $GITHUB_ENV
 
       # GHA: Spme path issues need resolving
       # GHA: We may have to run this and build-release in same step
