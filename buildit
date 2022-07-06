@@ -1,0 +1,3150 @@
+#!/usr/bin/env bash
+
+# {[ # DO NOT REMOVE (vim file spanning brace matching)
+
+help_info() {
+cat <<EOF
+  Usage:
+    ./buildit [flags]
+
+  Build the nrcamp (compiler) stack
+  Flags are:
+
+  --help  Print out this help message and exit.
+
+  --prefix=path  default=/opt/nr/camp where to install software
+
+  --full   Build expect, tcl, dejagnu and llvmtest.
+
+  --brief  Just build step1 of the gcc bootstrap.
+
+  --bloat  Do not strip the binaries, including executables and libraries.
+
+  --debug  Compile -g2 (default is to compile -g1)
+
+  --campver=version default 1.X camp version number, generally tied to the Hudson build number.
+
+  --resume=N  Resume the build at the step named N, as for example when step N failed on the last build.
+
+  --stop=N  Stop build before trying the step named N.
+EOF
+}
+
+systype="unknown"
+systype_qualifier=""
+
+unames=`uname -s`
+unamem=`uname -m`
+
+case "${unames}:${unamem}" in
+
+  [Dd][Aa][Rr][Ww][Ii][Nn]*)
+    systype="darwin"
+    kern_osrelease=$(uname -a | sed -e 's/.*Darwin Kernel Version \([0-9.]*\):.*/\1/')
+    #
+    # See this page
+    #   http://stackoverflow.com/questions/11072804/how-do-i-determine-the-os-version-at-runtime-in-os-x-or-ios-without-using-gesta
+    # For a mapping between marketing names, OSX release names, and kernel release names
+    #
+    case "${kern_osrelease}" in
+      15.*.*) systype_qualifier="El Capitan" ;;  # 10.11
+      14.*.*) systype_qualifier="Yosemite" ;;  # 10.10
+      13.*.*) systype_qualifier="Mavericks" ;; # 10.9
+      12.*.*) systype_qualifier="Mountain Lion" ;; # 10.8
+      11.*.*) systype_qualifier="Lion" ;;  # 10.7
+      10.*.*) systype_qualifier="Snow Leopard" ;; # 10.6
+       9.*.*) systype_qualifier="Leopard" ;; # 10.5
+    esac
+    ;;
+
+  [Ss][Oo][Ll][Aa][Rr][Ii][Ss]* | [Ss][Uu][Nn][Oo][Ss]*)
+    systype="solaris"
+    #
+    # follow what's done in C function nr_system_os_is_smartos
+    #
+    if [ -e /etc/release ] && grep -i smartos < /etc/release > /dev/null ; then
+      systype_qualifier="smartos"
+    fi
+    ;;
+
+  [Ll][Ii][Nn][Uu][Xx]:x86_64 | [Ll][Ii][Nn][Uu][Xx]:amd*)
+    systype="linux64"
+    ;;
+
+  [Ll][Ii][Nn][Uu][Xx]:i[345678]86)
+    systype="linux32"
+    ;;
+
+  [Ff][Rr][Ee][Ee][Bb][Ss][Dd]:x86_64 |[Ff][Rr][Ee][Ee][Bb][Ss][Dd]:amd*)
+    systype="freebsd64"
+    ;;
+
+  [Ff][Rr][Ee][Ee][Bb][Ss][Dd]:i[345678]86)
+    systype="freebsd32"
+    ;;
+
+  *) error "machine type '${unames}:${unamem}' not supported by this script"
+
+esac
+
+#
+# nrcamp builds on Yosemite on 07Jun2015 iff we use brew's gcc-5
+#
+if [ "${systype_qualifier}" = "Yosemite" -o "${systype_qualifier}" = "El Capitan" ] ; then
+  if [ ! -x /usr/local/bin/gcc-5 ] ; then
+    brew install gcc  # That's right, the brew keg is just "gcc"
+  fi
+  : ${CC:=gcc-5}
+  : ${CXX:=g++-5}
+else
+  : ${CC:=gcc}
+  : ${CXX:=g++}
+fi
+
+: ${CFLAGS:=-O0}
+: ${CXXFLAGS:=-O0}
+# : ${PARALLEL:=8}
+
+#
+# Figure out the available hardware parallelism
+# See http://stackoverflow.com/questions/6481005/obtain-the-number-of-cpus-cores-in-linux
+# for a discussion about both linux and macosx
+#
+if [ -x /usr/bin/nproc ] ; then
+  : ${PARALLEL:=$(/usr/bin/nproc)}  # linux
+elif [ -e /proc/cpuinfo ] ; then
+  : ${PARALLEL:=$(cat /proc/cpuinfo | grep -c vendor_id)}
+elif [ -e /usr/sbin/psrinfo ] ; then
+  : ${PARALLEL:=$(psrinfo -p)}  # solaris and smartos
+elif [ "${systype}" = "darwin" ] ; then
+  : ${PARALLEL:=$(sysctl -n hw.logicalcpu_max)}
+elif [ "${systype}" = "freebsd64" ]; then
+  : ${PARALLEL:=$(sysctl -n hw.ncpu)}
+else
+  echo "can not figure out hardware parallelism.  Using 3"
+  # Watch out, since compiling llvm is a real pig on memory consumption
+  : ${PARALLEL:=3}
+fi
+
+echo PARALLEL=${PARALLEL}
+
+topstart=`date -u +%s`
+
+CONFIG_SHELL="${BASH}"
+SHELL="${BASH}"
+export CONFIG_SHELL SHELL
+
+error() {
+  echo ""
+  echo "ERROR: $@"
+  exit 1
+}
+
+campver="1.X"
+campdate=`date +%Y%m%d`
+
+mode=quick
+pfx=/opt/nr/camp
+step_resume=
+step_stop=
+step_number=0
+step_name="?"
+brief=no
+do_strip=yes
+do_debug=no
+do_clean=yes
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --help)
+      help_info
+      exit 1
+      ;;
+    --prefix=*)
+      pfx=${1#*=}
+      ;;
+    --full)
+      mode=full
+      ;;
+    --brief)
+      brief=yes
+      ;;
+    --resume=*)
+      step_resume=${1#*=}
+      ;;
+    --stop=*)
+      step_stop=${1#*=}
+      ;;
+    --campver=*)
+      campver=${1#*=}
+      ;;
+    --bloat)
+      do_strip=no
+      ;;
+    --no-clean)
+      do_clean=no
+      ;;
+    --debug)
+      do_debug=yes
+      ;;
+    *) error "unknown argument '$1'"
+       ;;
+  esac
+  shift
+done
+
+echo "Building NRCAMP version ${campver} with mode=${mode} do_debug=${do_debug} do_clean=${do_clean} do_strip=${do_strip} prefix=${pfx}"
+
+verfile=versions
+if [ -e versions.$systype ] ; then
+  verfile=versions.$systype
+fi
+[ -d patches -a -f ${verfile} -a -f versions.full ] || error "invoked from incorrect directory"
+
+topdir="${PWD}"
+
+[ -d sources ] || error "getstuff not run"
+
+#
+# Read in and parse the versions file(s). If we are being run in full mode
+# we have a few extra packages to deal with; those are enumerated in versions.full
+#
+if [ "${mode}" = "quick" ]; then
+  verfiles="${topdir}/${verfile}"
+else
+  verfiles="${topdir}/${verfile} ${topdir}/versions.full"
+fi
+
+if [ "$do_strip" == "yes" ] ; then
+  gcc_strip=-s
+else
+  gcc_strip=
+fi
+
+if [ "$do_debug" == "yes" ] ; then
+  gcc_gflag="-g2"  # the default level
+else
+  gcc_gflag="-g1"  # enough for minimal backtracing
+fi
+
+pkglist=`sed -e '/^#/d' -e 's/=".*//' $verfiles`
+for vf in $verfiles; do
+  . $vf
+done
+
+for pkg in ${pkglist}; do
+  pi=`eval echo "\\$${pkg}"`
+  ver="${pi%^*}"
+  url="${pi#*^}"
+  file="${url##*/}"
+  subdir=${file%.tar.*}
+  subdir=${subdir%-src}
+
+  #
+  # Have to special case these due to a bug in the naming of the tar file
+  # relative to the naming of the top level directory unpacked from the tar file.
+  #
+  if [ "${subdir}" = "texinfo-4.13a" ] ; then
+    subdir="texinfo-4.13"
+  fi
+
+  if [ "${subdir}" = "flex-2.5.4a" ] ; then
+    subdir="flex-2.5.4"
+  fi
+
+  if [ "${subdir}" = "clang-3.4.src" ] ; then
+    subdir="clang-3.4"
+  fi
+
+  if [ "${subdir}" = "llvm-3.4.src" ] ; then
+    subdir="llvm-3.4"
+  fi
+
+  eval ${pkg}_ver="$ver"
+  eval ${pkg}_file="$file"
+  eval ${pkg}_dir="$subdir"
+  if [ ! -f sources/$file ]; then
+    error "getstuff not run to completion"
+  fi
+done
+
+bld="${topdir}/BUILD"
+bld="/opt/nr/camp.BUILD"
+if [ ! -d "${bld}" ] ; then
+  mkdir -p ${bld}
+fi
+
+iroot="${bld}/initial"
+srcroot="${bld}/src"
+logdir="${bld}/logs"
+xpath="$PATH"
+dpath="$PATH"
+xifs="$IFS"
+mypatch="${iroot}/bin/nr-patch"
+mymake=make
+mymjf=
+libsfx=
+libsfx32=
+localbld=
+tar=tar
+do_32_bit=no
+initial="yes"
+socklibs=
+rtlibs=
+
+#
+# Add a directory to the front of PATH if its not already there.
+#
+pathmunge() {
+  local p="$1"
+
+  case "$PATH" in
+    ${p}:* | *:${p} | *:${p}:*) ;;
+    *) PATH="${p}:${PATH}"
+       export PATH
+       ;;
+  esac
+}
+
+#
+# Determine the system we are running on. The rest of the script uses the
+# values defined here. We currently support:
+# linux32   - 32-bit Linux (CentOS 5.4)
+# linux64   - 64-bit Linux (CentOS 5.4)
+# darwin    - Apple MacOSX
+# solaris   - Oracle Solaris 11.1
+# freebsd32 - 32-bit FreeBSD (Newest, currently 10.1 -- UNSUPPORTED on 32 bit)
+# freebsd64 - 64-bit FreeBSD (Newest, currently 10.1)
+#
+# On all of the 64-bit targets that support it, the tools will be constructed
+# to support 32-bit compilation as well. For all platforms except for Solaris
+# and Darwin this is just a convenience. On Solaris, which we only support
+# running this script on a 64-bit system, we *must* support both -m64 and -m32
+# to switch between the two compilation models. All of the tools themselves
+# will be compiled as 64-bit binaries, however. On Darwin we need to multilib
+# in order to support producing "fat" or "universal" binaries.
+#
+
+case "${unames}:${unamem}" in
+
+  [Dd][Aa][Rr][Ww][Ii][Nn]*)
+    systype="darwin"
+    cfgbuild="x86_64-apple-darwin12"
+    cfgbuild32="i386-apple-darwin12"
+    #
+    # Mike LaSpina writes (31May2014):
+    #
+    # We have two choices, build NRLAMP with
+    # MACOSX_DEPLOYMENT_TARGET=10.5 and _DARWIN_USE_64_BIT_INODE=1, or
+    # raise the deployment target to 10.6. The latter option is safer
+    # because we don't know whether Apple compiled PHP on OSX 10.5 with
+    # 64-bit inode support. We know for certain this is the case for
+    # 10.9 and 10.8. I strongly suspect this is also the case for 10.7
+    # and 10.6. I also presume this is the case for MAMP.
+    #
+    # Whether 64-bit inode support is enabled or not depends on
+    # three preprocessor symbols (_DARWIN_FEATURE_ONLY_64_BIT_INODE,
+    # _DARWIN_USE_64_BIT_INODE, and _DARWIN_NO_64_BIT_INODE), and the
+    # deployment target. The stat(2) man page has a nice table that
+    # documents the effects of various combinations of these symbols
+    # and the deployment target. I've validated the accuracy of the
+    # documentation on my local system. For the curious it's worth a
+    # read.
+    #
+    export MACOSX_DEPLOYMENT_TARGET=10.6
+    localbld=-mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}
+    libsfx32="/i386"
+    #
+    # valgrind < 3.10.0 isn't supported well on osx darwin mavericks 10.9
+    # Although valgrind 3.10 reports to do "better".
+    #
+    darwin_version=$(uname -r | sed -e 's/\..*//')
+    if (( darwin_version >= 13 )) ; then
+      do_valgrind=no
+      do_valgrind=yes  # Try out valgrind 3.10.0
+    else
+      do_valgrind=yes
+    fi
+    do_32_bit=yes
+    do_32_bit=no  # As of Spring, 2014, we no longer support 32-bit darwin
+    ;;
+
+  [Ss][Oo][Ll][Aa][Rr][Ii][Ss]* | [Ss][Uu][Nn][Oo][Ss]*)
+    systype="solaris"
+    cfgbuild="x86_64-pc-solaris2.11"
+    cfgbuild32="i386-pc-solaris2.11"
+    libsfx="/amd64"
+    localbld="-m64"
+    tar=gtar
+    pathmunge /opt/local/bin
+    pathmunge /usr/gnu/bin
+    pathmunge /usr/perl5/bin
+    dpath="${PATH}"
+    do_valgrind=no
+    do_32_bit=yes
+    socklibs="-lsocket -lnsl"
+    ;;
+
+  [Ll][Ii][Nn][Uu][Xx]:x86_64 | [Ll][Ii][Nn][Uu][Xx]:amd*)
+    systype="linux64"
+    cfgbuild="x86_64-pc-linux"
+    cfgbuild32="i686-pc-linux"
+    localbld="-m64"
+    libsfx="64"
+    [ -d /lib/i386-linux-gnu ] && {
+      libsfx="/i386-linux-gnu"
+    }
+    [ -d /lib/x86_64-linux-gnu ] && {
+      libsfx="/x86_64-linux-gnu"
+      libsfx32="/i386-linux-gnu"
+    }
+    do_valgrind=yes
+    rtlibs="-lrt"
+    ;;
+
+  [Ll][Ii][Nn][Uu][Xx]:i[345678]86)
+    systype="linux32"
+    cfgbuild="i686-pc-linux"
+    do_valgrind=yes
+    rtlibs="-lrt"
+    [ -d /lib/i386-linux-gnu ] && {
+      libsfx="/i386-linux-gnu"
+    }
+    ;;
+
+  [Ff][Rr][Ee][Ee][Bb][Ss][Dd]:x86_64 |[Ff][Rr][Ee][Ee][Bb][Ss][Dd]:amd*)
+    systype="freebsd64"
+    cfgbuild="x86_64-pc-freebsd10"
+    localbld="-m64"
+    mymake=gmake
+    do_valgrind=no
+    ;;
+
+  [Ff][Rr][Ee][Ee][Bb][Ss][Dd]:i[345678]86)
+    systype="freebsd32"
+    cfgbuild="i686-pc-freebsd10"
+    mymake=gmake
+    do_valgrind=no
+    ;;
+
+  *) error "machine type '${unames}:${unamem}' not supported by this script"
+
+esac
+
+#
+# Add a mechanism for cleaning up on exit, as well as for reporting where we
+# were in the script in case we want to resume from a failed build.
+#
+declare -a cleanup_items
+
+cleanup_on_exit() {
+  topend=`date -u +%s`
+
+  for i in "${cleanup_items[@]}"; do
+    eval $i
+  done
+  [ -n "${step_number}" ] && {
+    echo ""
+    echo "Exiting script. If this was an abnormal termination and you wish to"
+    echo "make changes and resume the script, you can resume at the current"
+    echo "stage using ./buildit --resume=${step_name}"
+  }
+
+  echo ""
+  let tdiff="$topend - $topstart"
+  echo "Script took ${tdiff} second to run."
+  echo ""
+
+  if [ -f ${bld}/nrcamp-${systype}-${campver}.tar.bz2 ]; then
+    pushd "${bld}" > /dev/null 2>&1 # {
+      ls -l nrcamp-*.tar.bz2
+    popd > /dev/null 2>&1 # }
+  fi
+
+  PATH="${xpath}"
+  IFS="${xifs}"
+}
+
+cleanup() {
+  local c=${#cleanup_items[*]}
+  cleanup_items[$c]="$*"
+}
+
+trap cleanup_on_exit 0
+
+echo_progress() {
+  local msg=$1
+  echo "$(date): $msg"
+}
+
+echo_done_step() {
+  echo "--------------------------"
+}
+
+#
+# Execute a given function if we have no resume or the current resume count
+# has reached the correct step number.
+#
+resume() {
+  local stepstart
+  local stepend
+  local duration
+
+  step_name=$1  # a global
+  shift
+  # echo "step_name=$1"
+  # echo "others=$@"
+
+  let step_number="${step_number} + 1"
+  # [ "${step_resume}" = "${step_number}" ] && step_resume=
+  [ "${step_resume}" = "${step_name}" ] && step_resume=
+  [ -z "${step_resume}" ] && {
+    echo_progress "Step ${step_name} (step number ${step_number}) "
+
+    stepstart=`date -u +%s`
+    "$@"
+    stepend=`date -u +%s`
+
+    let duration="${stepend} - ${stepstart}"
+    echo_progress "Step ${step_name} (step number ${step_number}) done (elapsed time ${duration})"
+    echo_done_step
+  }
+
+  [ -n "${step_stop}" ] && {
+    [ "${step_name}" = "${step_stop}" ] && exit 0
+  }
+}
+
+#
+# We now have all of the packages we need to compile, and various variables
+# set up for each package. What follows is a function for doing each package.
+# These will be called in the correct order by the control function at the
+# end of this script file.
+#
+
+#
+# We will need a directory into which we install the initial versions of things
+# like binutils, and possibly others. These are compiled without optimizations
+# using the existing system compiler.
+#
+initial_setup() {
+  echo_progress "setup: "
+
+  [ -d "$bld" ] && {
+    [ ! -d "$bld.save" ] && {
+      mv -f "$bld" "$bld.save" || error "could not preserve existing BUILD directory"
+    }
+  }
+
+  rm -fr "$bld"                || error "could not clean old BUILD directory"
+  mkdir "$bld"                 || error "could not create top level BUILD directory"
+  mkdir "$bld/logs"            || error "could not create top level logs directory"
+  mkdir "$bld/logs2"           || error "could not create top level logs2 directory"
+  mkdir "$bld/src"             || error "could not create top level src directory"
+  mkdir "$bld/initial"         || error "could not create initial root directory"
+  mkdir "$bld/initial/bin"     || error "could not create initial bin directory"
+  mkdir "$bld/initial/lib"     || error "could not create initial lib directory"
+  mkdir "$bld/initial/lib/pic" || error "could not create initial lib directory"
+  [ -n "${libsfx}" ] && {
+    mkdir "$bld/initial/lib${libsfx}"     || error "could not create initial lib${libsfx} directory"
+    mkdir "$bld/initial/lib${libsfx}/pic" || error "could not create initial lib${libsfx}/pic directory"
+  }
+}
+
+#
+# Extract all of the sources.
+#
+extract_sources() {
+  echo_progress "extract: "
+
+  pushd "${srcroot}" > /dev/null 2>&1 || error "failed to change to source root"  # {
+    for pkg in ${pkglist}; do
+      eval pdir=\$${pkg}_dir
+      eval pfile=\$${pkg}_file
+
+      [ -d "${pdir}" ] || {
+        echo_progress "${pkg}..."
+        case "${pfile}" in
+          *.tar.gz)
+            gzip -dc "${topdir}/sources/${pfile}" | $tar -xf - > /dev/null 2>&1 || {
+              rm -fr "${srcroot}/${pdir}" > /dev/null 2>&1
+              error "failed to unpack ${pfile}"
+            }
+            ;;
+
+          *.tar.bz2)
+            bzip2 -dc "${topdir}/sources/${pfile}" | $tar -xf - > /dev/null 2>&1 || {
+              rm -fr "${srcroot}/${pdir}" > /dev/null 2>&1
+              error "failed to unpack ${pfile}"
+            }
+            ;;
+
+          *.tar.xz)
+            xz --decompress --stdout "${topdir}/sources/${pfile}" | $tar -xf - > /dev/null 2>&1 || {
+              rm -fr "${srcroot}/${pdir}" > /dev/null 2>&1
+              error "failed to unpack ${pfile}"
+            }
+            ;;
+
+          *)
+            error "unsupported extension for file ${pfile}"
+            ;;
+        esac
+
+        [ -d "${pdir}" ] || error "failed to extract ${pdir}"
+      }
+    done
+  popd > /dev/null 2>&1  # }
+}
+
+#
+# A lot of the packages below all follow the same pattern: configure, build,
+# install, clean. Rather than repeat all those code each time we have a general
+# purpose function here that does all that work. The various step functions
+# will use this to do their work. The parameters are:
+#
+# $1 - the name of the package
+# $2 - the name of the build directory
+# $3 - the name of the source directory
+# $4 - the log file prefix
+# $@ - arguments for the configure script
+#
+# Note that we always explicitly call bash on the configure script. This will
+# cater for packages like flex that are extremely old and whose configure
+# scripts do not re-exec themselves with a capable shell, and on at least
+# FreeBSD, /bin/sh is not bash or even remotely bash-like (it's a true Bourne
+# shell) and this causes configure to fail if we just exec it directly.
+#
+common_compile() {
+  local thisname="$1"
+  local thisbld="$2"
+  local thissrc="$3"
+  local thislog="$4"
+  shift 4
+
+  echo_progress "${thisname}: "
+
+  [ -d "${srcroot}/${thissrc}" ] || error "${thissrc} source directory missing"
+
+  rm -fr "${bld}/${thisbld}" > /dev/null 2>&1
+  mkdir "${bld}/${thisbld}" || error "failed to create ${thisbld} build directory"
+
+  pushd "${bld}/${thisbld}" > /dev/null 2>&1 || error "failed to change to ${thisbld} build directory" # {
+
+    echo_progress "configure..."
+    ${BASH} ${srcroot}/${thissrc}/configure $@ > ${logdir}/${thislog}.configure 2>&1 || error "${thisbld} configure failed"
+
+    echo_progress "build..."
+    ${mymake} ${mymjf} > ${logdir}/${thislog}.build 2>&1 || error "${thisbld} build failed"
+
+    echo_progress "install..."
+    ${mymake} install > ${logdir}/${thislog}.install 2>&1 || error "${thisbld} build failed"
+
+  popd > /dev/null 2>&1  # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/${thisbld}" > /dev/null 2>&1
+  fi
+}
+
+#
+# Most of the packages below will either accept a --program-prefix argument or
+# the scripts will arrange to move things such that they have one. However, we
+# also want things available by their original name, because that is how other
+# scripts may search for them. This relies on our bin directory being first
+# on the user's PATH which is easy enough to mandate. This function will be
+# given the name of a parent directory under our prefix, followed by a list of
+# file names which should have compatibility links created for them. So for
+# example: common_link bin ar nm ld
+#
+# would create a link from nr-ar to ar, nr-nm to nm and nr-ld to ld in the
+# $prefix/bin directory.
+#
+common_link() {
+  local ldir=$1; shift
+  local ftl=
+  local tf=
+  local lf=
+
+  echo_progress "links..."
+
+  for ftl in $@; do
+    tf="${iroot}/${ldir}/${ftl}"
+    lf="${iroot}/${ldir}/nr-${ftl}"
+    [ -h "${tf}" -o -f "${tf}" ] && {
+      rm -f "${tf}" > /dev/null 2>&1 || error "failed to remove  ${tf}"
+    }
+    [ -f "${lf}" ] && {
+      ln -sf "${lf}" "${tf}" > /dev/null 2>&1 || error "failed to link ${lf} to ${tf}"
+    }
+  done
+}
+
+#
+# This function is used to create various links between installed libraries.
+# It preserves the original name, as well as adding a version with the nr
+# prefix, and it copies the various -pic versions of the library into a pic
+# directory which applications can direct to with the right -L flags.
+#
+common_lib_link() {
+  local tf=
+  local df=
+
+  echo_progress "libs..."
+
+  for tf in $@; do
+    rm -f "${iroot}/lib${libsfx}/libnr${tf}.a"     "${iroot}/lib${libsfx}/libnr${tf}-pic.a"
+    rm -f "${iroot}/lib${libsfx}/pic/libnr${tf}.a" "${iroot}/lib${libsfx}/pic/libnr${tf}-pic.a" "${iroot}/lib${libsfx}/pic/lib${tf}.a"
+    ln -sf "${iroot}/lib${libsfx}/lib${tf}.a"      "${iroot}/lib${libsfx}/libnr${tf}.a"
+    ln -sf "${iroot}/lib${libsfx}/lib${tf}-pic.a"  "${iroot}/lib${libsfx}/libnr${tf}-pic.a"
+    ln -sf "${iroot}/lib${libsfx}/lib${tf}-pic.a"  "${iroot}/lib${libsfx}/pic/lib${tf}-pic.a"
+    ln -sf "${iroot}/lib${libsfx}/lib${tf}-pic.a"  "${iroot}/lib${libsfx}/pic/libnr${tf}-pic.a"
+    ln -sf "${iroot}/lib${libsfx}/lib${tf}-pic.a"  "${iroot}/lib${libsfx}/pic/libnr${tf}.a"
+    ln -sf "${iroot}/lib${libsfx}/lib${tf}-pic.a"  "${iroot}/lib${libsfx}/pic/lib${tf}.a"
+
+    if [ "${do_32_bit}" = "yes" ]; then
+      rm -f "${iroot}/lib${libsfx32}/libnr${tf}.a"     "${iroot}/lib${libsfx32}/libnr${tf}-pic.a"
+      rm -f "${iroot}/lib${libsfx32}/pic/libnr${tf}.a" "${iroot}/lib${libsfx32}/pic/libnr${tf}-pic.a" "${iroot}/lib${libsfx32}/pic/lib${tf}.a"
+      ln -sf "${iroot}/lib${libsfx32}/lib${tf}.a"      "${iroot}/lib${libsfx32}/libnr${tf}.a"
+      ln -sf "${iroot}/lib${libsfx32}/lib${tf}-pic.a"  "${iroot}/lib${libsfx32}/libnr${tf}-pic.a"
+      ln -sf "${iroot}/lib${libsfx32}/lib${tf}-pic.a"  "${iroot}/lib${libsfx32}/pic/lib${tf}-pic.a"
+      ln -sf "${iroot}/lib${libsfx32}/lib${tf}-pic.a"  "${iroot}/lib${libsfx32}/pic/libnr${tf}-pic.a"
+      ln -sf "${iroot}/lib${libsfx32}/lib${tf}-pic.a"  "${iroot}/lib${libsfx32}/pic/libnr${tf}.a"
+      ln -sf "${iroot}/lib${libsfx32}/lib${tf}-pic.a"  "${iroot}/lib${libsfx32}/pic/lib${tf}.a"
+    fi
+  done
+}
+
+#
+# We need a modern GNU patch. Compile one.
+#
+compile_gnu_patch() {
+  common_compile gpatch gpatch ${gpatch_dir} gpatch \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --program-prefix=nr- \
+    --disable-dependency-tracking
+  common_link bin patch
+}
+
+#
+# Ensure we have a reasonable make.
+#
+compile_gnu_make() {
+  common_compile gmake make ${make_dir} make \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --program-prefix=nr- \
+    --disable-nls \
+    --disable-dependency-tracking
+  common_link bin make
+}
+
+#
+# Some of the patches change *.texi files, and the make rules will want to
+# rebuild the *.info files. Therefore, we need to make sure that texinfo is
+# compiled and available before we bootstrap.
+#
+compile_texinfo() {
+  common_compile texinfo texinfo ${texinfo_dir} texinfo \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --disable-nls \
+    --program-prefix=nr- \
+    --disable-dependency-tracking
+  common_link bin info infokey install-info makeinfo pdftexi2dvi texi2dvi texi2pdf texindex
+}
+
+#
+# The various autoconf/automake tools and Bison all require a modern version
+# of the M4 macro processor. Most systems provide one but it is an extra
+# package to install. Therefore we compile our own and make sure that the
+# other tools in NRCAMP use this version.
+#
+# Modern versions of m4 want to link against libsigsegv, the rationale
+# given, murky at best, is it is a way to differentiate bugs in m4 from
+# legitimate stack overruns. Unfortunately, there is no way to disable
+# this attempt to link against libsigsegv.so at m4 configuration time.
+# Unfortunately, libsigsegv is on some of our compiler build machines,
+# but not on our product build machines, as for example solaris vs
+# joyent.
+#
+# On 10Apr2014 rrh renamed /usr/lib/64/*libsigsegv*.so*, as the only
+# use of that that he could determine was for m4. It appears that some
+# set of .so files were installed on the build machine which are not
+# commonly part of solaris. In this way binaries built on solaris could
+# run on joyent.
+#
+compile_m4() {
+  common_compile m4 m4 ${m4_dir} m4 \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --disable-nls \
+    --program-prefix=nr- \
+    --disable-dependency-tracking
+  common_link bin m4
+}
+
+#
+# help2man is needed to build manpages for modern bison 3.
+# Modern bison3 is needed to build PHP from github source,
+# as for example for php7.
+#
+compile_help2man() {
+  common_compile help2man help2man ${help2man_dir} help2man \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --libdir=${iroot}/lib${libsfx} \
+    --program-prefix=nr-
+  # common_link bin bison yacc
+}
+
+#
+# Bison is needed for anything that needs to generate parsers
+# Various parts of NRCAMP need bison.
+# bison (built from bison3) is needed to build PHP from the github source tree.
+# bison-2 is needed to build  percona in NRLAMP
+#
+compile_bison2() {
+  common_compile bison2 bison2 ${bison2_dir} bison2 \
+    --program-suffix=-2 \
+    --datadir=${iroot}/share/bison-2 \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --libdir=${iroot}/lib${libsfx} \
+    --disable-nls \
+    --program-prefix=nr-
+  common_link bin bison-2 yacc-2
+}
+
+compile_bison() {
+  common_compile bison bison ${bison_dir} bison \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --libdir=${iroot}/lib${libsfx} \
+    --disable-nls \
+    --program-prefix=nr-
+  common_link bin bison yacc
+}
+
+#
+# Flex provides a tool for producing a lexical scanner and tokenizer. It is
+# required by PHP 5.1 builds as well as parts of NRCAMP itself.
+#
+compile_flex() {
+  common_compile flex flex ${flex_dir} flex \
+    --prefix=${iroot} \
+    --disable-nls
+
+  echo_progress "link..."
+  # Flex does not provide a --program-prefix option so we need to manually
+  # rename the installed binaries to have the nr- prefix.
+  rm -f ${iroot}/bin/nr-flex ${iroot}/bin/nr-flex++ ${iroot}/bin/flex++ > /dev/null 2>&1
+  mv -f ${iroot}/bin/flex ${iroot}/bin/nr-flex > /dev/null 2>&1
+  ln -s ${iroot}/bin/nr-flex ${iroot}/bin/flex > /dev/null 2>&1
+  ln -s ${iroot}/bin/nr-flex ${iroot}/bin/flex++ > /dev/null 2>&1
+  ln -s ${iroot}/bin/nr-flex ${iroot}/bin/nr-flex++ > /dev/null 2>&1
+
+  # It also doesn't provide a --libdir option so it will have installed its
+  # support library in the wrong place. Move it.
+  [ -n "${libsfx}" ] && {
+    mv -f ${iroot}/lib/libfl.a ${iroot}/lib${libsfx}/libfl.a > /dev/null 2>&1 || error "failed to move libfl.a to lib directory"
+  }
+}
+
+compile_re2c() {
+  common_compile re2c re2c ${re2c_dir} re2c \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --libdir=${iroot}/lib${libsfx} \
+    --disable-nls \
+    --program-prefix=nr- \
+    --disable-dependency-tracking
+  common_link bin re2c
+}
+
+compile_ragel() {
+  common_compile ragel ragel ${ragel_dir} ragel \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --libdir=${iroot}/lib${libsfx} \
+    --disable-nls \
+    --program-prefix=nr- \
+    --disable-dependency-tracking
+  common_link bin ragel
+}
+
+compile_ctags() {
+  common_compile ctags ctags ${ctags_dir} ctags \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --libdir=${iroot}/lib${libsfx} \
+    --disable-nls \
+    --program-prefix=nr-
+  # common_link bin ctags
+}
+
+compile_protobuf() {
+  # TODO(rrh): couldn't get to compile and link on solaris/joyent
+  return
+  common_compile protobuf protobuf ${protobuf_dir} protobuf \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --libdir=${iroot}/lib${libsfx} \
+    --disable-nls \
+    --program-prefix=nr- \
+    --disable-dependency-tracking
+  common_link bin protoc
+}
+
+compile_protobuf_c() {
+  # TODO(rrh): couldn't get to compile and link on solaris/joyent
+  return
+  common_compile protobuf_c protobuf_c ${protobuf_c_dir} protobuf_c \
+    --prefix=${iroot} \
+    --build=${cfgbuild} \
+    --libdir=${iroot}/lib${libsfx} \
+    --disable-nls \
+    --program-prefix=nr- \
+    --disable-dependency-tracking
+  common_link bin protoc-c
+}
+
+#
+# Apply any patches.
+#
+patch_sources() {
+  echo_progress "apply patches: "
+
+  pushd "${srcroot}" > /dev/null 2>&1 || error "failed to change to source root"  # {
+
+    for pkg in ${pkglist}; do
+      eval pdir=\$${pkg}_dir
+      eval pver=\$${pkg}_ver
+
+      if [ -d "${pdir}" ] ; then
+        local pfiles="${topdir}/patches/${pkg}.${pver}.patch ${topdir}/patches/${pkg}.patch"
+        local found_patch=no
+        for pfile in ${pfiles} ; do
+          if [ -f "${pfile}" ]; then
+            local fmt=$(printf "%20s patched with %s" "${pkg}" "${pfile}")
+            echo_progress "${fmt}"
+            $mypatch -b -z .nrpatch -p 1 -Z -s -d ${pdir} -i "${pfile}" > /dev/null 2>&1 || error "patching ${pkg} failed"
+            found_patch=yes
+            break
+          fi
+        done
+        if [ "${found_patch}" = "no" ] ; then
+          error "No patch file found: ${pfiles}"
+        fi
+      else
+        error "no patch directory ${pdir}"
+      fi
+    done
+
+    #
+    # GCC provides no clean way of doing this so we have to hack ...
+    #
+    sed -e '/^PPLLIBS =/d' "${gcc_dir}/gcc/Makefile.in" > "${gcc_dir}/gcc/Makefile.in.noppl"
+    cp -f "${gcc_dir}/gcc/Makefile.in" "${gcc_dir}/gcc/Makefile.in.withppl"
+
+  popd > /dev/null 2>&1  # }
+}
+
+#
+# Before we can bootstrap gcc there are a few libraries we need to compile.
+# In theory, we are supposed to be able to simply link these in to the GCC
+# tree and have it do the right thing. However, this fails with MPC. The
+# reason is that it assumes that MPFR is a flat source tree (which it is in
+# version 2.x). However, we want to use the latest MPFR, which has its source
+# in the src/ directory. It is complicated to patch gcc to address this so the
+# path of least resistance is to compile GMP, MPFR and MPC with the system
+# compiler and install them, before we attempt to bootstrap GCC. That is what
+# the following six steps do.
+#
+# None of these libraries are required or provided outside of the NRCAMP build
+# itself. In particular, we make no attempt to multilib these libraries as they
+# are statically linked in to GCC. In order to avoid having them erroneously
+# put 64-bit libraries in the 32-bit library space, we use a special prefix
+# inside ${iroot}. This is called "ofb" which stands for "only for build".
+# At the very end of the NRCAMP run we remove this entire prefix.
+#
+
+compile_gmp() {
+  common_compile GMP gmp ${gmp_dir} gmp \
+    --build=${cfgbuild} \
+    --prefix=${iroot}/ofb \
+    --enable-cxx \
+    --disable-shared
+}
+
+compile_mpfr() {
+  common_compile MPFR mpfr ${mpfr_dir} mpfr \
+    --build=${cfgbuild} \
+    --prefix=${iroot}/ofb \
+    --disable-shared \
+    --with-gmp=${iroot}/ofb \
+    --disable-maintainer-mode \
+    --disable-dependency-tracking
+}
+
+compile_mpc() {
+  common_compile MPC mpc ${mpc_dir} mpc \
+    --build=${cfgbuild} \
+    --prefix=${iroot}/ofb \
+    --disable-shared \
+    --with-gmp=${iroot}/ofb \
+    --with-mpfr=${iroot}/ofb \
+    --disable-maintainer-mode \
+    --disable-dependency-tracking
+}
+
+compile_isl() {
+  common_compile ISL isl ${isl_dir} isl \
+    --build=${cfgbuild} \
+    --prefix=${iroot}/ofb \
+    --disable-shared \
+    --with-gmp=system \
+    --with-gmp_prefix=${iroot}/ofb \
+    --disable-dependency-tracking
+}
+
+compile_ppl() {
+  local opt=disable
+  local optval=
+  local oldmjf="${mymjf}"
+
+  [ "${initial}" = "yes" ] || {
+    opt=enable
+    optval="=speed"
+  }
+
+  mymjf="" common_compile PPL ppl ${ppl_dir} ppl \
+    --build=${cfgbuild} \
+    --prefix=${iroot}/ofb \
+    --disable-shared \
+    --enable-fpmath=no \
+    --${opt}-optimization${optval} \
+    --with-gmp-prefix=${iroot}/ofb \
+    --without-java \
+    --disable-maintainer-mode \
+    --disable-dependency-tracking
+
+  mymjf="${oldmjf}"
+}
+
+compile_cloog() {
+  common_compile CLooG cloog ${cloog_dir} cloog \
+    --build=${cfgbuild} \
+    --prefix=${iroot}/ofb \
+    --disable-shared \
+    --with-isl=system \
+    --with-gmp-prefix=${iroot}/ofb \
+    --with-isl-prefix=${iroot}/ofb \
+    --disable-maintainer-mode \
+    --disable-dependency-tracking
+}
+
+#
+# binutils provides the assembler and link editor for most platforms. Only on
+# Darwin do we use the standard system tools, due to the complexities that
+# arise from its multi-arch support. However, we still compile it on Darwin in
+# order to provide other tools such as objdump.
+# The gold link editor is written in C++ and it blows up with older versions
+# of the system compiler (such as on FreeBSD). Therefore, for the bootstrap
+# phase we do not enable the gold linker. However, once we have compiled the
+# compiler, we can then enable it, and have it in place before the final phase
+# of the compiler. This function takes a single option argument, either the
+# word enable or disable, which will enable or disable the gold linker. The
+# step sequencer below will call this correctly.
+#
+compile_binutils() {
+  local gold="$1"
+  local bnudir=${binutils_dir}
+  local bnuopt=
+
+  if [ -z "${gold}" ]; then
+    gold="enable"
+  fi
+
+  case "$systype" in
+    linux*)
+      bnudir=${lnxbinutils_dir}
+      bnuopt="--${gold}-gold --enable-ld --enable-plugins"
+      ;;
+    darwin)
+      bnuopt="--${gold}-gold --disable-ld --disable-as"
+      ;;
+    solaris)
+      bnuopt="--${gold}-gold --disable-ld"
+      ;;
+    *)
+      bnuopt="--${gold}-gold --enable-ld"
+      ;;
+  esac
+
+  common_compile binutils binutils ${bnudir} binutils \
+    --build=${cfgbuild} \
+    --prefix=${iroot} \
+    --libdir=${iroot}/lib${libsfx} \
+    --program-prefix=nr- \
+    --disable-nls \
+    --disable-werror \
+    --disable-maintainer-mode ${bnuopt} \
+    --with-bugurl="mailto:rrh@newrelic.com" \
+    --disable-dependency-tracking
+
+  #
+  # Darwin has some issues building if the binutils version of strip and ranlib
+  # are used, so we remove them, as well as any other potentially problematic
+  # commands.
+  #
+  [ "${systype}" = "darwin" ] && {
+    rm -f "${iroot}/${cfgbuild}/bin/strip"
+    rm -f "${iroot}/${cfgbuild}/bin/ar"
+    rm -f "${iroot}/${cfgbuild}/bin/nm"
+    rm -f "${iroot}/${cfgbuild}/bin/ranlib"
+    rm -f "${iroot}/bin/nr-strip"
+    rm -f "${iroot}/bin/nr-ar"
+    rm -f "${iroot}/bin/nr-nm"
+    rm -f "${iroot}/bin/nr-ranlib"
+  }
+
+  common_link bin addr2line ar as c++filt elfedit gprof ld ld.bfd ld.gold nm objcopy objdump ranlib readelf size strings strip
+}
+
+#
+# Compile the compiler. This takes a long time. This function requires at least
+# two arguments. The first is either "bootstrap" or "final". The second is a
+# make target to build (can be empty). The rest of the arguments are passed to
+# configure untouched. If we are building the final version of the compiler we
+# have extra work to do on Darwin in order to get multi-arch support.
+#
+compile_gcc() {
+  local gcm=$1; shift
+  local gtgt=$1; shift
+  local nls="disable"
+  local mlib=
+  local bnupfx="${iroot}/bin/nr-"
+  local ldpfx="${iroot}/bin/nr-"
+  local langs="c,c++,objc,obj-c++,lto"
+  local gnuld=with
+  local symver=
+  local zlib="--with-system-zlib"
+  local graphite=
+  local libsanitizer=--enable-libsanitizer
+
+  echo_progress "${gcm}: "
+
+  [ -d "${bld}/gcc-${gcm}" ] || {
+    mkdir "${bld}/gcc-${gcm}" || error "failed to create gcc-${gcm} build directory"
+  }
+
+  # On Darwin we want to use the standard ld, as, strip, nm etc...
+  if [ "${systype}" = "darwin" ]; then
+    bnupfx="/usr/bin/"
+    ldpfx="/usr/bin/"
+    gnuld=without
+    #
+    # rrh spent a lot of time 18Sep2014 trying to get libsanitizer on gcc 4.8.3
+    # to compile on macosx.  libtool run in the libsanitizer library had
+    # issues with "no work to do".
+    #
+    libsanitizer=--disable-libsanitizer
+  fi
+
+  # On Solaris we want to use the standard ld, but can use GNU as etc.
+  if [ "${systype}" = "solaris" ]; then
+    gnuld=without
+    ldpfx="/usr/bin/"
+    # Overcomes a bug in the makefiles when compiling static only
+    symver="--disable-symvers"
+    libsanitizer=--disable-libsanitizer
+  fi
+
+  if [ "${systype}" = "solaris" -a "${systype_qualifier}" = "smartos" ]; then
+   #
+   # Smartos builds of gcc as of 05Mar2015 can't seem
+   # to find the zlib .h and the .so
+   # in the system, so just use what comes with gcc.
+   #
+    zlib=
+  else
+    zlib=--with-system-zlib
+  fi
+
+  if [ "${systype}" = "freebsd32" -o "${systype}" = "freebsd64" ]; then
+    libsanitizer=--disable-libsanitizer  # TODO: TBA
+  fi
+
+  # Shorten the build a little by only multilibing the final build
+  if [ "${do_32_bit}" = "yes" ]; then
+    if [ "${gcm}" = "final" ]; then
+      mlib="--enable-multilib"
+    else
+      mlib="--disable-multilib"
+    fi
+  fi
+
+  # Shorten it a little more by only build C and C++ during bootstrap
+  if [ "${gcm}" = "bootstrap" ]; then
+    if [ "${systype}" = "freebsd32" -o "${systype}" = "freebsd64" ]; then
+      # this could probably be put in for other OSes as well,
+      # since we only need the botstrap to build the compiler.
+      langs="c,lto"
+    else
+      langs="c,c++,lto"
+    fi
+  fi
+
+  # Due to poorly constructed C++ headers Linux must compile with NLS enabled
+  # (it includes locale.h without a #ifdef ENABLE_NLS which causes a compile
+  # error).
+  if [ "${systype}" = "linux32" -o "${systype}" = "linux64" ]; then
+    nls="enable"
+  fi
+
+  if [ "${gcm}" = "final" ]; then
+    graphite="--with-cloog=${iroot}/ofb --enable-cloog-backend=isl --enable-watchdog --disable-cloog-version-check --with-bits=gmp"
+    cp -f "${srcroot}/${gcc_dir}/gcc/Makefile.in.withppl" "${srcroot}/${gcc_dir}/gcc/Makefile.in"
+  else
+    graphite="--without-cloog --without-ppl"
+    cp -f "${srcroot}/${gcc_dir}/gcc/Makefile.in.noppl" "${srcroot}/${gcc_dir}/gcc/Makefile.in"
+  fi
+
+  #
+  # binutils 2.24.1 (the latest as of 29Sep2014) has an ansidecl.h
+  # which is older and less complete/modern
+  # than the ansidecl which comes with gcc 4.9.1.
+  # Needless to say, gcc 4.9.1 needs its own ansidecl.h
+  # It isn't clear why gcc is compiled with the flag -I/opt/nr/camp/include,
+  # but if it is, the wrong ansidecl.h will be used,
+  # and gcc won't be able to compile its libraries.
+  #
+  if [ -e /opt/nr/camp/include ] ; then
+    pushd /opt/nr/camp/include > /dev/null 2>&1  # {
+      mkdir binutils || true
+      mv ansidecl.h   binutils || true
+      mv bfd.h        binutils || true
+      mv bfdlink.h    binutils || true
+      mv dis-asm.h    binutils || true
+      mv plugin-api.h binutils || true
+      mv symcat.h     binutils || true
+    popd > /dev/null 2>&1  # }
+  fi
+
+  pushd "${bld}/gcc-${gcm}" > /dev/null 2>&1  # {
+
+    echo_progress "configure..."
+    AR_FOR_TARGET=${bnupfx}ar \
+    AS_FOR_TARGET=${bnupfx}as \
+    LD_FOR_TARGET=${ldpfx}ld \
+    NM_FOR_TARGET=${bnupfx}nm \
+    STRIP_FOR_TARGET=${bnupfx}strip \
+    RANLIB_FOR_TARGET=${bnupfx}ranlib \
+    OBJDUMP_FOR_TARGET=${bnupfx}objdump \
+    AR=${bnupfx}ar \
+    AS=${bnupfx}as \
+    LD=${ldpfx}ld \
+    NM=${bnupfx}nm \
+    STRIP=${bnupfx}strip \
+    RANLIB=${bnupfx}ranlib \
+    OBJDUMP=${bnupfx}objdump \
+    bash "${srcroot}/${gcc_dir}/configure" $@ \
+      --build=${cfgbuild} \
+      --enable-languages=${langs} \
+      --prefix=${iroot} \
+      ${libsanitizer} \
+      --disable-shared \
+      --with-pic \
+      --${nls}-nls ${mlib} ${symver} \
+      ${zlib} \
+      --program-prefix=nr- \
+      --enable-threads \
+      --enable-plugin \
+      --enable-lto \
+      --enable-__cxa_atexit \
+      --disable-werror \
+      --enable-build-with-cxx \
+      --with-gmp=${iroot}/ofb \
+      --with-mpfr=${iroot}/ofb \
+      --with-mpc=${iroot}/ofb \
+      --with-as=${bnupfx}as \
+      --${gnuld}-gnu-ld --with-ld=${ldpfx}ld \
+      --with-ar=${bnupfx}ar \
+      --with-ranlib=${bnupfx}ranlib \
+      --with-strip=${bnupfx}strip \
+      --with-nm=${bnupfx}nm \
+      --with-bugurl="mailto:rrh@newrelic.com" \
+      ${graphite} \
+      --with-pkgversion="New Relic NRCAMP Version ${campver} (${campdate})" > ${logdir}/gcc.configure 2>&1 || error "gcc-${gcm} configure failed"
+
+    echo_progress "build..."
+    AR_FOR_TARGET=${bnupfx}ar \
+    AS_FOR_TARGET=${bnupfx}as \
+    LD_FOR_TARGET=${ldpfx}ld \
+    NM_FOR_TARGET=${bnupfx}nm \
+    STRIP_FOR_TARGET=${bnupfx}strip \
+    RANLIB_FOR_TARGET=${bnupfx}ranlib \
+    OBJDUMP_FOR_TARGET=${bnupfx}objdump \
+    AR=${bnupfx}ar \
+    AS=${bnupfx}as \
+    LD=${ldpfx}ld \
+    NM=${bnupfx}nm \
+    STRIP=${bnupfx}strip \
+    RANLIB=${bnupfx}ranlib \
+    OBJDUMP=${bnupfx}objdump \
+    ${mymake} ${mymjf} ${gtgt} > ${logdir}/gcc.build 2>&1 || error "gcc-${gcm} build failed"
+
+    echo_progress "install..."
+    AR_FOR_TARGET=${bnupfx}ar \
+    AS_FOR_TARGET=${bnupfx}as \
+    LD_FOR_TARGET=${ldpfx}ld \
+    NM_FOR_TARGET=${bnupfx}nm \
+    STRIP_FOR_TARGET=${bnupfx}strip \
+    RANLIB_FOR_TARGET=${bnupfx}ranlib \
+    OBJDUMP_FOR_TARGET=${bnupfx}objdump \
+    AR=${bnupfx}ar \
+    AS=${bnupfx}as \
+    LD=${ldpfx}ld \
+    NM=${bnupfx}nm \
+    STRIP=${bnupfx}strip \
+    RANLIB=${bnupfx}ranlib \
+    OBJDUMP=${bnupfx}objdump \
+    ${mymake} install  > ${logdir}/gcc.install 2>&1 || error "gcc-${gcm} install failed"
+
+    if [ "${systype}" = "darwin" -a "${gcm}" = "final" ]; then
+      #
+      # On Darwin, construct a replacement compiler driver that makes it possible
+      # to use multiple -arch options.
+      #
+      dver=`cat "${srcroot}/${gcc_dir}/gcc/BASE-VER"`
+      pushd gcc > /dev/null 2>&1 # {
+      rm -f "${iroot}/bin/nr-gcc" "${iroot}/bin/nr-g++" "${iroot}/bin/nr-c++"
+
+      echo_progress "gcc-driver..."
+      ./xgcc -B./ -o ${iroot}/bin/nr-gcc ${topdir}/extra/driverdriver.c -I${srcroot}/${gcc_dir}/include \
+        -I${srcroot}/${gcc_dir}/gcc/config/i386 -I${srcroot} -I. -L../libiberty -liberty \
+        -O2 -DBUILD_C_COMPILER -DDRIVER_VERSION=\""${dver}"\" >> ${logdir}/gcc.build 2>&1 || error "failed to build gcc driver"
+
+      echo_progress "g++-driver..."
+      ./xgcc -B./ -o ${iroot}/bin/nr-g++ ${topdir}/extra/driverdriver.c -I${srcroot}/${gcc_dir}/include \
+        -I${srcroot}/${gcc_dir}/gcc/config/i386 -I${srcroot} -I. -L../libiberty -liberty \
+        -O2 -DDRIVER_VERSION=\""${dver}"\" >> ${logdir}/gcc.build 2>&1 || error "failed to build g++ driver"
+      ln ${iroot}/bin/nr-g++ ${iroot}/bin/nr-c++ || error "failed to link g++ to c++"
+
+      for prog in gcc g++; do
+        sed -e "s,@fullroot@,${iroot},g" -e "s,@systype@,${cfgbuild},g" -e "s,@bits@,32,g" \
+            ${topdir}/extra/${prog}.in > ${iroot}/bin/i386-nr-${prog}-${dver} || error "failed to create ${prog}-m32 driver script"
+        chmod 755 ${iroot}/bin/i386-nr-${prog}-${dver} || error "failed to set ${prog}-m32 driver permissions"
+        sed -e "s,@fullroot@,${iroot},g" -e "s,@systype@,${cfgbuild},g" -e "s,@bits@,64,g" \
+            ${topdir}/extra/${prog}.in > ${iroot}/bin/x86_64-nr-${prog}-${dver} || error "failed to create ${prog}-m64 driver script"
+        chmod 755 ${iroot}/bin/x86_64-nr-${prog}-${dver} || error "failed to set ${prog}-m64 driver permissions"
+      done
+      popd > /dev/null 2>&1  # }
+    fi
+
+  popd > /dev/null 2>&1 # }
+
+#  echo_progress "clean..."
+#  rm -fr "${bld}/gcc-${gcm}" > /dev/null 2>&1
+
+  common_link bin gcc cc g++ c++ gcc-ar gcc-nm gcc-ranlib gcov cpp
+
+  [ -h "${iroot}/bin/cc" ] || {
+    ln -s "${iroot}/bin/nr-gcc" "${iroot}/bin/cc" || error "failed to create cc link"
+  }
+  [ -h "${iroot}/bin/c++" ] || {
+    ln -s "${iroot}/bin/nr-g++" "${iroot}/bin/c++" || error "failed to create c++ link"
+  }
+
+  for tf in c++ g++ gcc gcc-ar gcc-nm gcc-ranlib; do
+    rm -f ${iroot}/bin/${cfgbuild}-${tf} > /dev/null 2>&1
+    [ -f "${iroot}/bin/${cfgbuild}-nr-${tf}" ] && {
+      ln -s "${iroot}/bin/${cfgbuild}-nr-${tf}" "${iroot}/bin/${cfgbuild}-${tf}" > /dev/null 2>&1
+    }
+  done
+}
+
+#
+# This function moves aside any current NRCAMP directory and creates the new
+# empty final destination. All of the various tools will have their final
+# versions installed here (except the test suites which are not installed).
+#
+prepare_final() {
+  echo_progress "final prep: "
+
+  [ -d "${pfx}" ] && {
+    [ -d "${fparent}/${pname}.save" ] || {
+      if [ -d "${pfx}.save" ]; then
+        # mv -f doesn't do what you think it does: if dest operand is a
+        # directory, it still puts stuff inside.
+        rm -rf "${pfx}.save"
+      fi
+
+      mv -f "${pfx}" "${pfx}.save" || error "could not preserve existing ${pfx}"
+    }
+  }
+
+  rm -fr "${pfx}"           || error "could not remove ${pfx}"
+  mkdir -p "${pfx}/bin"     || error "failed to create empty ${pfx}/bin"
+  mkdir -p "${pfx}/include" || error "failed to create empty ${pfx}/include"
+  mkdir -p "${pfx}/lib"     || error "failed to create empt ${pfx}/lib"
+  mkdir -p "${pfx}/lib/pic" || error "failed to create empt ${pfx}/lib/pic"
+  [ -n "${libsfx}" ] && {
+    mkdir -p "${pfx}/lib${libsfx}"     || error "failed to create empty ${pfx}/lib${libsfx}"
+    mkdir -p "${pfx}/lib${libsfx}/pic" || error "failed to create empty ${pfx}/lib${libsfx}/pic"
+  }
+  [ -n "${libsfx32}" ] && {
+    mkdir -p "${pfx}/lib${libsfx32}"     || error "failed to create empty ${pfx}/lib${libsfx32}"
+    mkdir -p "${pfx}/lib${libsfx32}/pic" || error "failed to create empty ${pfx}/lib${libsfx32}/pic"
+  }
+
+}
+
+#
+# These function build the various versions of the autotools.
+#
+compile_autoconf_213() {
+  common_compile ${autoconf213_dir} ${autoconf213_dir} ${autoconf213_dir} ${autoconf213_dir} \
+    --program-suffix=-2.13 \
+    --program-prefix=nr- \
+    --prefix=${iroot} \
+    --datadir=${iroot}/share/autoconf-2.13 $@
+  common_link bin autoconf-2.13 autoheader-2.13 autoreconf-2.13 autoscan-2.13 autoupdate-2.13 ifnames-2.13
+}
+
+compile_autoconf() {
+  common_compile ${autoconf_dir} ${autoconf_dir} ${autoconf_dir} ${autoconf_dir} \
+    --program-prefix=nr- \
+    --prefix=${iroot} $@
+  common_link bin autoconf autoheader autoreconf autoscan autoupdate autom4te ifnames
+}
+
+compile_automake_19() {
+  common_compile ${automake19_dir} ${automake19_dir} ${automake19_dir} ${automake19_dir} \
+    --program-prefix=nr- \
+    --prefix=${iroot} $@
+  common_link bin automake-1.9 aclocal-1.9
+}
+
+compile_automake_110() {
+  common_compile ${automake110_dir} ${automake110_dir} ${automake110_dir} ${automake110_dir} \
+    --program-prefix=nr- \
+    --prefix=${iroot} $@
+  common_link bin automake-1.10 aclocal-1.10
+}
+
+compile_automake_111() {
+  common_compile ${automake111_dir} ${automake111_dir} ${automake111_dir} ${automake111_dir} \
+    --program-prefix=nr- \
+    --prefix=${iroot} $@
+  common_link bin automake-1.11 aclocal-1.11
+}
+
+compile_automake() {
+  common_compile ${automake_dir} ${automake_dir} ${automake_dir} ${automake_dir} \
+    --program-prefix=nr- \
+    --prefix=${iroot} $@
+  common_link bin automake-1.12 aclocal-1.12 automake aclocal
+}
+
+compile_libtool_22() {
+  common_compile ${libtool22_dir} ${libtool22_dir} ${libtool22_dir} ${libtool22_dir} \
+    --program-prefix=nr- \
+    --program-suffix=-2.2 \
+    --prefix=${iroot} $@
+  common_link bin libtool-2.2 libtoolize-2.2
+}
+
+compile_libtool() {
+  common_compile ${libtool_dir} ${libtool_dir} ${libtool_dir} ${libtool_dir} \
+    --program-prefix=nr- \
+    --prefix=${iroot} $@
+  common_link bin libtool libtoolize
+}
+
+#
+# CMake isn't used by anything in NRCAMP itself. However, since NRCAMP will
+# be used for compiling NRLAMP, which does need CMake for Percona, we provide
+# it here as part of NRCAMP so that all of our development tools live in one
+# place.
+#
+# There is a trick to building CMake. One of its tests goes and inserts a
+# -L/usr/lib or -L/usr/lib64 on the compile command line. This causes the
+# wrong version of libstdc++ to be used, which results in a link-time
+# error due to the headers having declared functions that do not exist in
+# the system libstdc++. Therefore, we have to put our own -L option into
+# the mix, before any other -L flags. This is why we specify the library
+# directory in CFLAGS and CXXFLAGS before we configure. It ensures that our
+# newly constructed libstdc++ from the NRCAMP compiler is used.
+#
+compile_cmake() {
+  echo_progress "cmake: "
+
+  [ -d "${srcroot}/${cmake_dir}" ] || error "${cmake_dir} source missing"
+
+  rm -fr "${bld}/cmake" > /dev/null 2>&1
+  mkdir "${bld}/cmake" || error "failed to create cmake build directory"
+
+  pushd "${bld}/cmake" > /dev/null 2>&1 || error "failed to change to cmake directory" # {
+
+    echo_progress "configure..."
+    CFLAGS="${CFLAGS} -L${iroot}/lib${libsfx}" CXXFLAGS="${CXXFLAGS} -L${iroot}/lib${libsfx}" ${srcroot}/${cmake_dir}/bootstrap \
+      --prefix=${iroot} \
+      --parallel=${PARALLEL} \
+      --system-curl \
+      --system-expat \
+      --system-zlib \
+      --system-bzip2 \
+      --no-qt-gui -- \
+        -DCMAKE_PREFIX_PATH="${pfx}" \
+        -DCMAKE_SYSTEM_LIBRARY_PATH="${pfx}/lib${libsfx}:/usr/lib${libsfx}:/lib${libsfx}" \
+        -DCMAKE_SYSTEM_INCLUDE_PATH="${pfx}/include:/usr/include" \
+        -DCMAKE_SYSTEM_PROGRAM_PATH="${pfx}/bin:/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin" \
+        -DCMAKE_LIBRARY_ARCHITECTURE="${libsfx#/}" \
+      > ${logdir}/cmake.configure 2>&1 || error "cmake configure failed"
+
+    echo_progress "tweak..."
+    for mf in \
+        Source/CMakeFiles/ccmake.dir/link.txt \
+        Source/CMakeFiles/cmake.dir/link.txt \
+        Source/CMakeFiles/cpack.dir/link.txt \
+        Source/CMakeFiles/ctest.dir/link.txt \
+        Tests/CMakeLib/CMakeFiles/runcompilecommands.dir/link.txt \
+        Tests/CMakeLib/CMakeFiles/CMakeLibTests.dir/link.txt \
+        ; do
+      sed -e "s@${pfx}/lib${libsfx}/libcurl.a@-lnrcurl -lnrssl -lnrcrypto -lnrz@g" \
+          -e "s@-lcurl -Wl,-Bdynamic@-Wl,-Bdynamic -pthread -lnrcurl -lnrssl -lnrcrypto -lnrz ${rtlibs} ${socklibs}@g" \
+          -e "s@-lexpat@-lexpat@g" \
+          -e "s@-lz @-lnrz @g" \
+          -e "s@-lbz2@-lnrbz2@g" \
+          -e "s@-lssl@-lnrssl@g" \
+          -e "s@-lcrypto@-lnrcrypto@g" \
+          ${mf} > ${mf}.tweak
+      cp -f ${mf}.tweak ${mf}
+      rm -f ${mf}.tweak
+    done
+
+    echo_progress "build..."
+    ${mymake} ${mymjf} VERBOSE=1 > ${logdir}/cmake.build 2>&1 || error "cmake build failed"
+
+    echo_progress "install..."
+    ${mymake} install > ${logdir}/cmake.install 2>&1 || error "cmake install failed"
+
+    rm -f ${iroot}/bin/nr-cmake ${iroot}/bin/nr-cpack ${iroot}/bin/nr-ctest ${iroot}/bin/nr-ccmake > /dev/null 2>&1
+    mv -f ${iroot}/bin/cmake ${iroot}/bin/nr-cmake
+    mv -f ${iroot}/bin/cpack ${iroot}/bin/nr-cpack
+    mv -f ${iroot}/bin/ctest ${iroot}/bin/nr-ctest
+    mv -f ${iroot}/bin/ccmake ${iroot}/bin/nr-ccmake
+
+  popd > /dev/null 2>&1  # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/cmake" > /dev/null 2>&1
+  fi
+
+  common_link bin cmake cpack ctest ccmake
+}
+
+#
+# Not all platforms support valgrind. In fact only Linux and Darwin do.
+#
+compile_valgrind() {
+  if [ "${do_valgrind}" = "no" ]; then
+    echo_progress "valgrind: unsupported...."
+    return 0
+  fi
+
+  common_compile valgrind valgrind ${valgrind_dir} valgrind \
+    --build=${cfgbuild} \
+    --prefix=${iroot} \
+    --libdir=${iroot}/lib${libsfx} \
+    --disable-dependency-tracking \
+    --disable-maintainer-mode \
+    --program-prefix=nr-
+
+  common_link bin valgrind valgrind-listener vgdb callgrind_annotate callgrind_control cg_annotate cg_diff cg_merge ms_print
+}
+
+#
+# Prepare the LLVM tree.
+#
+prepare_llvm() {
+  echo_progress "llvm-prep: "
+
+  [ -d "${srcroot}/${llvm_dir}" ] || error "${llvm_dir} source missing"
+  [ -d "${srcroot}/${clang_dir}" ] || error "${clang_dir} source missing"
+  [ -d "${srcroot}/${compilerrt_dir}" ] || error "${compilerrt_dir} source missing"
+
+  pushd "${srcroot}/${llvm_dir}" > /dev/null 2>&1 # {
+
+    [ -h tools/clang ] || {
+      rm -fr tools/clang > /dev/null 2>&1
+    }
+    rm -f tools/clang > /dev/null 2>&1
+    ln -s "${srcroot}/${clang_dir}" "${srcroot}/${llvm_dir}/tools/clang" > /dev/null 2>&1 || error "could not link in clang tree"
+
+    [ -h projects/compiler-rt ] || {
+      rm -fr projects/compiler-rt > /dev/null 2>&1
+    }
+    rm -f projects/compiler-rt > /dev/null 2>&1
+    # ln -s "${srcroot}/${compilerrt_dir}" "${srcroot}/${llvm_dir}/projects/compiler-rt" > /dev/null 2>&1 || error "could not link in crt tree"
+
+  popd > /dev/null 2>&1 # }
+}
+
+#
+# Do LLVM. Please note that the intention of providing LLVm is *not* to
+# provide it as an alternative compiler to GCC even though it can be used
+# that way. Rather, it is provided for its static analysis tools.
+#
+compile_llvm() {
+  echo_progress "llvm: "
+
+  if [ "${systype}" = "solaris" -o "${systype}" = "freebsd64" -o "${systype}" = "freebsd32" ]; then
+    #
+    # llvm 3.5.0 no longer seems to compile on solaris.
+    # g++, libtool and ld conspire to make ld issue a message:
+    #   ld: fatal: unrecognized option '--'
+    #
+    # llvm is skipped on FreeBSD as we only use it for static analysis, build
+    # fails, we can get what we need from ports/pkg.
+    #
+    echo "skip llvm build on ${systype}"
+    return
+  fi
+
+  [ -d "${bld}/llvm" ] || {
+    mkdir "${bld}/llvm" || error "failed to create LLVM build directory"
+  }
+
+  local buildit_dir=$(pwd)
+
+  pushd "${bld}/llvm" > /dev/null 2>&1 # {
+
+    #
+    # 14Sep2014: Attempts to build llvm 3.5.0
+    # on Ubuntu 10 and 14 got confused trying to link in a non-pic
+    # version of libz.a taken from nrcamp.
+    #
+    # There are flags to tell llvm configure to use or not use PIC,
+    # but those flags don't propagate uniformly through the source tree,
+    # and so some parts are built non-pic, but others are built with pic code.
+    # Mess.
+    #
+    # It proved to be futile to jigger the libdir
+    # to link with the system libz.a,
+    # which presumably is the correct pic/non-pic type..
+    # Here we move libz.a, presumed to be non-pic, to another file name,
+    # and then make libz.a be a link to the pic version.
+    # Other clients may have to reverse this...
+    #
+    if [ -e /opt/nr/camp/lib/x86_64-linux-gnu/libz.a ] ; then
+      #
+      #  Worked On ubuntu 14.04 64-bit
+      #
+      if [ ! -h /opt/nr/camp/lib/x86_64-linux-gnu/libz.a ] ; then
+        mv    /opt/nr/camp/lib/x86_64-linux-gnu/libz.a     /opt/nr/camp/lib/x86_64-linux-gnu/libz-non-pic.a
+        ln -s /opt/nr/camp/lib/x86_64-linux-gnu/libz-pic.a /opt/nr/camp/lib/x86_64-linux-gnu/libz.a
+      fi
+    fi
+
+    if [ -e /opt/nr/camp/lib/libz.a ] ; then
+      #
+      #  Worked on ubuntu 5.5 32-bit (?)
+      #
+      if [ ! -h /opt/nr/camp/lib/libz.a ] ; then
+        mv    /opt/nr/camp/lib/libz.a     /opt/nr/camp/lib/libz-non-pic.a
+        ln -s /opt/nr/camp/lib/libz-pic.a /opt/nr/camp/lib/libz.a
+      fi
+    fi
+
+    if [ -e /opt/nr/camp/lib64/libz.a ] ; then
+      #
+      #  Worked on ubuntu 5.5 64-bit
+      #
+      if [ ! -h /opt/nr/camp/lib64/libz.a ] ; then
+        mv    /opt/nr/camp/lib64/libz.a     /opt/nr/camp/lib64/libz-non-pic.a
+        ln -s /opt/nr/camp/lib64/libz-pic.a /opt/nr/camp/lib64/libz.a
+      fi
+    fi
+
+    #
+    # clang 3.6.0 needs python 2.7
+    #
+    # On ubuntu, get /usr/local/bin/python2.7
+    # by downloading and building it,
+    # and then installing: sudo make altinstall
+    #
+    # See http://askubuntu.com/questions/101591/how-do-i-install-python-2-7-2-on-ubuntu
+    #
+    local python=/usr/local/bin/python
+    if [ ! -e $python ] ; then
+      python=/usr/local/bin/python2.7
+    fi
+    if [ ! -e $python ] ; then
+      python=/usr/bin/python
+    fi
+    if [ ! -e $python ] ; then
+      echo "skip llvm build due to missing python"
+      return
+    fi
+    if ! $python --version 2>&1 | grep '2.[789]' > /dev/null ; then
+      echo "skip llvm build due to $python not being modern version 2.X"
+      return
+    fi
+
+    echo_progress "configure..."
+    "${srcroot}/${llvm_dir}/configure" $@ \
+      --build=${cfgbuild} \
+      --prefix=${iroot} \
+      --libdir=${iroot}/lib${libsfx} \
+      --with-python=${python} \
+      --disable-shared \
+      --enable-optimized \
+      --enable-pthreads \
+      --enable-jit \
+      --enable-threads \
+      --with-bug-report-url="mailto:rrh@newrelic.com" \
+      --enable-bindings=none > ${logdir}/llvm.configure 2>&1 || error "LLVM configure failed"
+
+    echo_progress "tweak..."
+    if [ "${systype}" = "solaris" ]; then
+      sed -e 's/HAVE_LINK_VERSION_SCRIPT = 1/HAVE_LINK_VERSION_SCRIPT = 0/' \
+        Makefile.config > Makefile.config.foo || error "tweaking Makefile.config"
+      cp -f Makefile.config.foo Makefile.config > /dev/null 2>&1 || error "copying new Makefile.config"
+      rm -f Makefile.config.foo > /dev/null 2>&1
+    fi
+
+    echo_progress "build..."
+    VERBOSE=1 ${mymake} ${mymjf} > ${logdir}/llvm.build 2>&1 || error "LLVM build failed"
+
+    echo_progress "install..."
+    local kflag=
+    if [ "${systype}" = "solaris" ]; then
+      #
+      # llvm 3.4 on solaris as of 06Jan2014
+      # reports a failure to install header files for mysterious reasons,
+      # even though the install appears to have succeeded.
+      #
+      kflag="-k"
+      VERBOSE=1 ${mymake} ${kflag} install > ${logdir}/llvm.install 2>&1 || true
+      bash -x ${buildit_dir}/solaris-llvm-install-hack.sh || true
+    else
+      VERBOSE=1 ${mymake} ${kflag} install > ${logdir}/llvm.install 2>&1 || error "LLVM install failed"
+    fi
+
+    pushd "${srcroot}/${clang_dir}/tools" > /dev/null 2>&1 # {
+      find scan-build scan-view -depth -print | cpio -pdumv "${iroot}/bin" >> ${logdir}/llvm.install 2>&1 || error "Failed to copy scan-tools"
+    popd > /dev/null 2>&1 # }
+
+    [ -n "${libsfx}" ] && {
+      mv -f ${iroot}/lib/libLLVM*.a ${iroot}/lib${libsfx}/ > /dev/null 2>&1
+      mv -f ${iroot}/lib/libclang*.a ${iroot}/lib${libsfx}/ > /dev/null 2>&1
+    }
+
+  popd > /dev/null 2>&1 # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/llvm" > /dev/null 2>&1
+  fi
+}
+
+#
+# Compile various libraries that are provided by NRCAMP. These libraries are
+# very infrequently changed and should only be changed with considerable
+# caution. For all of these libraries we provide only static archives, no
+# shared ones, so that any software we produce using them does not have an
+# extra dependency that needs to be installed. However, in at least the case
+# for the PHP agent, which is itself created as a shared library, we need to
+# produce PIC versions of these libraries. Also to ensure that we do not ever
+# accidentally link against the system version of these libraries, they all
+# have their installation file changed to have an "nr" prefix. Thus, a library
+# called libexpat.a becomes libnrexpat.a, and the application must link with
+# -lnrexpat. The original names are preserved, however.
+#
+# On multilib hosts such as Linux-64, Solaris and Darwin, we compile each of
+# these twice - once for 64-bit and once for 32.
+#
+
+#
+# Change the Configure file so that nothing is compiled with any optimization,
+# as needed for making libraries suitable for valgrind or intensive debugging.
+#
+patch_ssl_config_file_for_debug() {
+  local dir_name=$1
+  sed \
+    -e 's/ -O[123] / -O0 /g' \
+    -e 's/ -g[123] / -g2 /g' \
+    < ${dir_name}/Configure > ${dir_name}/Configure.new
+  mv ${dir_name}/Configure.new ${dir_name}/Configure
+  chmod oug+rwx ${dir_name}/Configure
+}
+
+#
+# OpenSSL does not support compiling in a separate directory to the source,
+# so we have to copy it in. Also note that its Makefiles are poorly constructed
+# and do not support parallel builds correctly, so we cannot use GNU make's
+# jobserver feature, which makes the builds a bit slow. Also note that the
+# normal install process installs a header, opensslconf.h, that varies depending
+# on how things were configured. This means that for multilibs hosts, we need
+# to copy it and put in a shim for detecting if we are in 32 or 64 bit mode and
+# include the right header appropriately.
+#
+compile_openssl() {
+  local osslt=
+  local sslcfg=
+  local sslcfg32=
+  local dcf=
+  local dcf32=
+  local sslxtra=
+  local sslxtra32=
+  local cflags=
+  local cflags32=
+
+  echo_progress "openssl: "
+
+  [ -d "${bld}/openssl" ] && {
+    rm -fr "${bld}/openssl"            || error "failed to remove openssl build directory"
+  }
+  mkdir -p "${bld}/openssl/pic"        || error "failed to create openssl/pic directory"
+  mkdir -p "${bld}/openssl/nonpic"     || error "failed to create openssl/nonpic directory"
+
+  [ "${do_32_bit}" = "yes" ] && {
+    mkdir -p "${bld}/openssl/pic32"    || error "failed to create openssl/pic32 directory"
+    mkdir -p "${bld}/openssl/nonpic32" || error "failed to create openssl/nonpic32 directory"
+  }
+
+  pushd "${bld}/openssl" > /dev/null 2>&1 # {
+    osslt="$PWD"
+
+    echo_progress "copy..."
+    pushd "${srcroot}/${openssl_dir}" > /dev/null 2>&1 # {
+        find . -depth -print | cpio -pdum "${osslt}/nonpic"   > /dev/null 2>&1 || error "failed to copy OpenSSL to nonpic"
+        find . -depth -print | cpio -pdum "${osslt}/pic"      > /dev/null 2>&1 || error "failed to copy OpenSSL to pic"
+      [ "${do_32_bit}" = "yes" ] && {
+        find . -depth -print | cpio -pdum "${osslt}/nonpic32" > /dev/null 2>&1 || error "failed to copy OpenSSL to nonpic32"
+        find . -depth -print | cpio -pdum "${osslt}/pic32"    > /dev/null 2>&1 || error "failed to copy OpenSSL to pic32"
+      }
+      if [ "${do_debug}" = "yes" ] ; then
+        patch_ssl_config_file_for_debug ${osslt}/nonpic
+        patch_ssl_config_file_for_debug ${osslt}/pic
+        patch_ssl_config_file_for_debug ${osslt}/nonpic32
+        patch_ssl_config_file_for_debug ${osslt}/pic32
+      fi
+    popd > /dev/null 2>&1  # }
+
+    #
+    # TODO: WATCHOUT: the -march and related flags for selecting the ISA subset
+    # apparently have no effect whatsoever on how the ssl library is built;
+    # that knowledge is in the ssl library's Configure script.
+    # To make a change, hack on patches/openssl.1.0.1e.patch as appropriate
+    #
+    # -march=core2 enables SSE3 instruction set; but SSE3 isn't on old opterons
+    #
+    local x86_64_isa="-march=core2 -mno-ssse3 -mno-sse3"
+    case "${systype}" in
+      darwin)
+        sslcfg="darwin64-x86_64-cc"
+        dcf="-arch x86_64 -m64 ${x86_64_isa} -Wl,-search_paths_first -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}"
+        sslcfg32="darwin-i386-cc"
+        dcf32="-arch i386 -m32 ${x86_64_isa} -Wl,-search_paths_first -mmacosx-version-min=${MACOSX_DEPLOYMENT_TARGET}"
+        ;;
+      linux64)
+        sslcfg="linux-x86_64"
+        dcf="-DNR_HAVE_BITS_TYPES_H -m64 ${x86_64_isa}"
+        sslxtra="-Wa,--noexecstack -fno-strict-aliasing -DTERMIO"
+        sslcfg32="linux-elf"
+        dcf32="-DNR_HAVE_BITS_TYPES_H -m32 ${x86_64_isa}"
+        sslxtra32="-Wa,--noexecstack -fno-strict-aliasing -DTERMIO"
+        ;;
+      linux32)
+        sslcfg="linux-elf"
+        dcf="-m32 -DNR_HAVE_BITS_TYPES_H ${x86_64_isa}"
+        sslxtra="-Wa,--noexecstack -fno-strict-aliasing -DTERMIO"
+        ;;
+      solaris)
+        sslcfg="solaris64-x86_64-gcc"
+        dcf="-m64 ${x86_64_isa}"
+        sslcfg32="solaris-x86-gcc"
+        dcf32="-m32 ${x86_64_isa}"
+        ;;
+      freebsd64)
+        sslcfg="BSD-x86_64"
+        dcf="-m64 ${x86_64_isa}"
+        ;;
+      freebsd32)
+        sslcfg="BSD-x86-elf"
+        dcf="-m32 -march=pentium4"
+        ;;
+    esac
+
+    cflags="${dcf}     -O3 ${gcc_gflag} -fno-omit-frame-pointer -DNR_OPTIMIZED_BUILD -pthread"
+    cflags32="${dcf32} -O3 ${gcc_gflag} -fno-omit-frame-pointer -DNR_OPTIMIZED_BUILD -pthread"
+
+    echo_progress "configure(nonpic)..."
+
+    pushd nonpic > /dev/null 2>&1 # {
+      #
+      # WATCHOUT: TODO(rrh) openSSL Configure script is insensitive to the CFLAGS environment variable
+      # The actual CFLAGS that are used patched into the Configure file as applied by the patch file patches/openssl*.patch
+      # Carefully edit the patch file (only the lines starting with +) to achieve changes to the CFLAGS.
+      #
+      # The Configure script apparently doesn't respond to either CFLAG or CFLAGS in the environment.
+      #
+      CFLAGS="${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" ./Configure \
+        --prefix=${iroot} \
+        --libdir=lib${libsfx} \
+        ${sslxtra} threads no-shared no-dso ${sslcfg} > ${logdir}/ossl-nonpic.configure 2>&1 || error "OpenSSL nonpic configure failed"
+
+      echo_progress "build(nonpic)..."
+      ${mymake} >  ${logdir}/ossl-nonpic.build 2>&1
+      ${mymake} >> ${logdir}/ossl-nonpic.build 2>&1 || error "OpenSSL nonpic build failed"
+
+      echo_progress "install(nonpic)..."
+      ${mymake} install_sw > ${logdir}/ossl-nonpic.install 2>&1 || error "OpenSSL build failed"
+    popd > /dev/null 2>&1 # }
+
+    echo_progress "configure(pic)..."
+    pushd pic > /dev/null 2>&1 # {
+      CFLAGS="${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" ./Configure \
+        --prefix=${iroot} \
+        --libdir=lib${libsfx} \
+        ${sslxtra} -fPIC -DPIC threads no-shared no-dso no-asm ${sslcfg} > ${logdir}/ossl-pic.configure 2>&1 || error "OpenSSL pic configure failed"
+
+      echo_progress "build(pic)..."
+      ${mymake} >  ${logdir}/ossl-pic.build 2>&1
+      ${mymake} >> ${logdir}/ossl-pic.build 2>&1 || error "OpenSSL pic build failed"
+
+      echo_progress "install(pic)..."
+      cp -f libssl.a     ${iroot}/lib${libsfx}/libssl-pic.a   > /dev/null 2>&1 || error "ssl pic install failed"
+      cp -f libcrypto.a ${iroot}/lib${libsfx}/libcrypto-pic.a > /dev/null 2>&1 || error "crypto pic install failed"
+    popd > /dev/null 2>&1 # }
+
+    if [ "${do_32_bit}" = "yes" ]; then
+      echo_progress "configure(nonpic32)..."
+      pushd nonpic32 > /dev/null 2>&1 # {
+        CFLAGS="${CFLAGS} ${cflags32}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" ./Configure \
+          --prefix=${iroot} \
+          --libdir=lib${libsfx32} \
+          ${sslxtra} threads no-shared no-dso ${sslcfg32} > ${logdir}/ossl-nonpic32.configure 2>&1 || error "OpenSSL nonpic32 configure failed"
+
+        echo_progress "build(nonpic32)..."
+        ${mymake} > ${logdir}/ossl-nonpic32.build 2>&1 || error "OpenSSL nonpic32 build failed"
+
+        echo_progress "install(nonpic32)..."
+        cp -f libssl.a    ${iroot}/lib${libsfx32}/libssl.a    > /dev/null 2>&1 || error "ssl nonpic32 install failed"
+        cp -f libcrypto.a ${iroot}/lib${libsfx32}/libcrypto.a > /dev/null 2>&1 || error "crypto nonpic32 install failed"
+      popd > /dev/null 2>&1 # }
+
+      echo_progress "configure(pic32)..."
+      pushd pic32 > /dev/null 2>&1 # {
+        CFLAGS="${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" ./Configure \
+          --prefix=${iroot} \
+          --libdir=lib${libsfx32} \
+          ${sslxtra} -fPIC -DPIC threads no-shared no-dso no-asm ${sslcfg32} > ${logdir}/ossl-pic32.configure 2>&1 || error "OpenSSL pic32 configure failed"
+
+        echo_progress "build(pic32)..."
+        ${mymake} > ${logdir}/ossl-pic32.build 2>&1 || error "OpenSSL pic32 build failed"
+
+        echo_progress "install(pic32)..."
+        cp -f libssl.a    ${iroot}/lib${libsfx32}/libssl-pic.a    > /dev/null 2>&1 || error "ssl pic32 install failed"
+        cp -f libcrypto.a ${iroot}/lib${libsfx32}/libcrypto-pic.a > /dev/null 2>&1 || error "crypto pic32 install failed"
+      popd > /dev/null 2>&1 # }
+
+      echo_progress "headers..."
+      mv -f "${iroot}/include/openssl/opensslconf.h" "${iroot}/include/openssl/opensslconf-64.h" > /dev/null 2>&1 || error "moving header failed"
+      cp -f nonpic32/crypto/opensslconf.h            "${iroot}/include/openssl/opensslconf-32.h" > /dev/null 2>&1 || error "copying 32-bit header failed"
+      cat > "${iroot}/include/openssl/opensslconf.h" <<EOF
+#ifdef __x86_64__
+#include <openssl/opensslconf-64.h>
+#else
+#include <openssl/opensslconf-32.h>
+#endif
+EOF
+      chmod 644 "${iroot}/include/openssl/opensslconf.h"
+    fi
+
+  popd > /dev/null 2>&1 # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/openssl" > /dev/null 2>&1
+  fi
+
+  rm -f ${iroot}/bin/nr-openssl ${iroot}/bin/nr-c_rehash > /dev/null 2>&1
+  mv -f ${iroot}/bin/openssl    ${iroot}/bin/nr-openssl  > /dev/null 2>&1
+  mv -f ${iroot}/bin/c_rehash   ${iroot}/bin/nr-c_rehash > /dev/null 2>&1
+
+  # openssl 1.0.2u does not seem to place libraries in the /opt/nr/camp/lib directory
+  # and later programs like PHP 7.3 in NRCAMP will not build w/o the libraries being there
+  # so lets copy them over.
+  # Alternative would be to patch all the PHPs from 7.3 (and earlier?) to properly look in
+  # /opt/nr/camp/lib/lib64 and /opt/nr/camp/lib64/pic for libraries as well.
+  cp -f ${iroot}/lib64/libcrypto.a ${iroot}/lib/
+  cp -f ${iroot}/lib64/libcrypto-pic.a ${iroot}/lib/
+  cp -f ${iroot}/lib64/libssl.a ${iroot}/lib/
+  cp -f ${iroot}/lib64/libssl-pic.a ${iroot}/lib/
+
+  common_lib_link ssl crypto
+  common_link bin openssl c_rehash
+}
+
+#
+# As with OpenSSL, ZLIB doesn't support using a different directory for the
+# source and build directory, so we have to copy the sources into place.
+#
+compile_zlib() {
+  local zlt=
+  local b64=
+  local mf=
+
+  echo_progress "zlib: "
+
+  [ -d "${bld}/zlib" ] && {
+    rm -fr "${bld}/zlib"            || error "failed to remove zlib build directory"
+  }
+  mkdir -p "${bld}/zlib/pic"        || error "failed to create zlib/pic directory"
+  mkdir -p "${bld}/zlib/nonpic"     || error "failed to create zlib/nonpic directory"
+
+  [ "${do_32_bit}" = "yes" ] && {
+    mkdir -p "${bld}/zlib/pic32"    || error "failed to create zlib/pic32 directory"
+    mkdir -p "${bld}/zlib/nonpic32" || error "failed to create zlib/nonpic32 directory"
+  }
+
+  pushd "${bld}/zlib" > /dev/null 2>&1 # {
+    zlt="$PWD"
+
+    echo_progress "copy..."
+    pushd "${srcroot}/${zlib_dir}" > /dev/null 2>&1 # {
+      find . -depth -print | cpio -pdum "${zlt}/nonpic" > /dev/null 2>&1     || error "failed to copy zlib to nonpic"
+      find . -depth -print | cpio -pdum "${zlt}/pic" > /dev/null 2>&1        || error "failed to copy zlib to pic"
+      [ "${do_32_bit}" = "yes" ] && {
+        find . -depth -print | cpio -pdum "${zlt}/nonpic32" > /dev/null 2>&1 || error "failed to copy zlib to nonpic32"
+        find . -depth -print | cpio -pdum "${zlt}/pic32" > /dev/null 2>&1    || error "failed to copy zlib to pic32"
+      }
+    popd > /dev/null 2>&1 # }
+
+    cflags="-DNR_OPTIMIZED_BUILD -pthread"
+    case "${systype}" in
+      darwin | linux64 | freebsd64 | solaris)
+        b64="--64"
+        mf="-m64"
+        ;;
+      *)
+        b64=
+        mf=
+        ;;
+    esac
+
+    echo_progress "configure(nonpic)..."
+    pushd nonpic > /dev/null 2>&1 # {
+      CFLAGS="${mf} ${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" ./configure \
+        --prefix=${iroot} \
+        --libdir=${iroot}/lib${libsfx} \
+        --static ${b64} > ${logdir}/zlib-nonpic.configure 2>&1 || error "zlib nonpic configure failed"
+
+      echo_progress "build(nonpic)..."
+      ${mymake} ${mymjf} > ${logdir}/zlib-nonpic.build 2>&1  || error "zlib nonpic build failed"
+
+      echo_progress "install(nonpic)..."
+      ${mymake} install > ${logdir}/zlib-nonpic.install 2>&1 || error "zlib install failed"
+    popd > /dev/null 2>&1 # }
+
+    echo_progress "configure(pic)..."
+    pushd pic > /dev/null 2>&1 # {
+      CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" ./configure \
+        --prefix=${iroot} \
+        --libdir=${iroot}/lib${libsfx} \
+        --static ${b64} > ${logdir}/zlib-pic.configure 2>&1 || error "zlib pic configure failed"
+
+      echo_progress "build(pic)..."
+      ${mymake} ${mymjf} > ${logdir}/zlib-pic.build 2>&1 || error "zlib pic build failed"
+
+      echo_progress "install(pic)..."
+      cp -f libz.a ${iroot}/lib${libsfx}/libz-pic.a > /dev/null 2>&1 || error "zlib pic install failed"
+    popd > /dev/null 2>&1  # }
+
+    if [ "${do_32_bit}" = "yes" ]; then
+      b64=
+      mf="-m32"
+
+      echo_progress "configure(nonpic32)..."
+      pushd nonpic32 > /dev/null 2>&1 # {
+        CFLAGS="${mf} ${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" ./configure \
+          --prefix=${iroot} \
+          --libdir=${iroot}/lib${libsfx32} \
+          --static > ${logdir}/zlib-nonpic32.configure 2>&1          || error "zlib nonpic32 configure failed"
+
+        echo_progress "build(nonpic32)..."
+        ${mymake} ${mymjf} > ${logdir}/zlib-nonpic32.build 2>&1      || error "zlib nonpic32 build failed"
+
+        echo_progress "install(nonpic32)..."
+        cp -f libz.a ${iroot}/lib${libsfx32}/libz.a > /dev/null 2>&1 || error "zlib nonpic32 install failed"
+      popd > /dev/null 2>&1 # }
+
+      echo_progress "configure(pic32)..."
+      pushd pic32 > /dev/null 2>&1 # {
+        CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" ./configure \
+          --prefix=${iroot} \
+          --libdir=${iroot}/lib${libsfx32} \
+          --static > ${logdir}/zlib-pic32.configure 2>&1     || error "zlib pic32 configure failed"
+
+        echo_progress "build(pic32)..."
+        ${mymake} ${mymjf} > ${logdir}/zlib-pic32.build 2>&1 || error "zlib pic32 build failed"
+
+        echo_progress "install(pic32)..."
+        cp -f libz.a ${iroot}/lib${libsfx32}/libz-pic.a > /dev/null 2>&1 || error "zlib pic32 install failed"
+      popd > /dev/null 2>&1  # }
+    fi
+
+  popd > /dev/null 2>&1 # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/zlib" > /dev/null 2>&1
+  fi
+
+  common_lib_link z
+}
+
+#
+# As with OpenSSL, ZLIB doesn't support using a different directory for the
+# source and build directory, so we have to copy the sources into place.
+#
+compile_bzip2() {
+  local mf=
+  local blt=
+
+  echo_progress "bzip2: "
+
+  [ -d "${bld}/bzip2" ] && {
+    rm -fr "${bld}/bzip2" || error "failed to remove bzip2 build directory"
+  }
+  mkdir -p "${bld}/bzip2/pic"    || error "failed to create bzip2/pic directory"
+  mkdir -p "${bld}/bzip2/nonpic" || error "failed to create bzip2/nonpic directory"
+
+  [ "${do_32_bit}" = "yes" ] && {
+    mkdir -p "${bld}/bzip2/pic32"    || error "failed to create bzip2/pic32 directory"
+    mkdir -p "${bld}/bzip2/nonpic32" || error "failed to create bzip2/nonpic32 directory"
+  }
+
+  pushd "${bld}/bzip2" > /dev/null 2>&1 # {
+    blt="${PWD}"
+
+    echo_progress "copy..."
+    pushd "${srcroot}/${bzip2_dir}" > /dev/null 2>&1 # {
+      find . -depth -print | cpio -pdum "${blt}/nonpic" > /dev/null 2>&1 || error "failed to copy bzip2 to nonpic"
+      find . -depth -print | cpio -pdum "${blt}/pic" > /dev/null 2>&1    || error "failed to copy bzip2 to pic"
+      [ "${do_32_bit}" = "yes" ] && {
+        find . -depth -print | cpio -pdum "${blt}/nonpic32" > /dev/null 2>&1 || error "failed to copy bzip2 to nonpic32"
+        find . -depth -print | cpio -pdum "${blt}/pic32" > /dev/null 2>&1    || error "failed to copy bzip2 to pic32"
+      }
+    popd > /dev/null 2>&1 # }
+
+    cflags="-DNR_OPTIMIZED_BUILD -pthread"
+    case "${systype}" in
+      darwin | linux64 | freebsd64 | solaris)
+        mf="-m64"
+        ;;
+      *)
+        mf=
+        ;;
+    esac
+
+    pushd nonpic > /dev/null 2>&1 # {
+      echo_progress "build(nonpic)..."
+      ${mymake} ${mymjf} \
+        CC="${CC}" \
+        CFLAGS="${mf} ${CFLAGS} ${cflags}" \
+        LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" \
+        > ${logdir}/bzip2-nonpic.build 2>&1 || error "bzip2 nonpic build failed"
+
+      echo_progress "install(nonpic)..."
+      cp -f bzlib.h ${iroot}/include/bzlib.h
+      cp -f libbz2.a ${iroot}/lib${libsfx}/libbz2.a
+      chmod 644 ${iroot}/lib${libsfx}/libbz2.a
+      cp -f bzip2 ${iroot}/bin/nr-bzip2
+      chmod 755 ${iroot}/bin/nr-bzip2
+
+      ln -sf ${iroot}/bin/nr-bzip2 ${iroot}/bin/nr-bzcat
+      ln -sf ${iroot}/bin/nr-bzip2 ${iroot}/bin/nr-bunzip2
+
+      cp -f bzip2recover ${iroot}/bin/nr-bzip2recover
+      chmod 755 ${iroot}/bin/nr-bzip2recover
+
+      cp -f bzgrep ${iroot}/bin/nr-bzgrep
+      chmod 755 ${iroot}/bin/nr-bzgrep
+
+      ln -sf ${iroot}/bin/nr-bzgrep ${iroot}/bin/nr-bzegrep
+      ln -sf ${iroot}/bin/nr-bzgrep ${iroot}/bin/nr-bzfgrep
+
+      cp -f bzmore ${iroot}/bin/nr-bzmore
+      chmod 755 ${iroot}/bin/nr-bzmore
+
+      ln -sf ${iroot}/bin/nr-bzmore ${iroot}/bin/nr-bzless
+
+      cp -f bzdiff ${iroot}/bin/nr-bzdiff
+      chmod 755 ${iroot}/bin/nr-bzdiff
+
+      ln -sf ${iroot}/bin/nr-bzdiff ${iroot}/bin/nr-bzcmp
+
+      ${mymake} install PREFIX="${iroot}" > ${logdir}/bzip2-nonpic.install 2>&1 || error "bzip2 install failed"
+    popd > /dev/null 2>&1  # }
+
+    pushd pic > /dev/null 2>&1 # {
+      echo_progress "build(pic)..."
+      ${mymake} ${mymjf} CC="${CC}" CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libbz2.a > ${logdir}/bzip2-nonpic.build 2>&1 || error "bzip2 pic build failed"
+
+      echo_progress "install(pic)..."
+      cp -f libbz2.a ${iroot}/lib${libsfx}/libbz2-pic.a > /dev/null 2>&1 || error "bzip2 pic install failed"
+    popd > /dev/null 2>&1  # }
+
+    if [ "${do_32_bit}" = "yes" ]; then
+      mf="-m32"
+
+      pushd nonpic32 > /dev/null 2>&1 # {
+        echo_progress "build(nonpic32)..."
+        ${mymake} ${mymjf} CC="${CC}" CFLAGS="${mf} ${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libbz2.a > ${logdir}/bzip2-nonpic32.build 2>&1 || error "bzip2 nonpic32 build failed"
+
+        echo_progress "install(nonpic32)..."
+        cp -f libbz2.a ${iroot}/lib${libsfx32}/libbz2.a > /dev/null 2>&1 || error "bzip2 nonpic32 install failed"
+      popd > /dev/null 2>&1 # }
+
+      pushd pic32 > /dev/null 2>&1 # {
+        echo_progress "build(pic32)..."
+        ${mymake} ${mymjf} CC="${CC}" CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libbz2.a > ${logdir}/bzip2-pic32.build 2>&1 || error "bzip2 pic32 build failed"
+
+        echo_progress "install(pic32)..."
+        cp -f libbz2.a ${iroot}/lib${libsfx32}/libbz2-pic.a > /dev/null 2>&1 || error "bzip2 pic32 install failed"
+      popd > /dev/null 2>&1  # }
+    fi
+
+  popd > /dev/null 2>&1 # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/bzip2" > /dev/null 2>&1
+  fi
+
+  common_lib_link bz2
+  common_link bin bzip2 bunzip2 bzcat bzip2recover bzgrep bzegrep bzfgrep bzmore bzless bzdiff bzcmp
+}
+
+#
+# The rest of the libraries use modern autoconf style configure scripts so we
+# do not need to copy things into place and can configure directly out of the
+# source directory.
+#
+
+#
+# PCRE. Modern versions of this library support a mini JIT for dealing with
+# complex RE's. We disable support for this, mostly due to my (Kean's)
+# paranoia regarding the JIT code, and the possibility of it going wrong and
+# providing an attacker with a potential vector for exploiting things.
+#
+compile_pcre() {
+  local cfgargs="--disable-dependency-tracking --disable-shared --enable-static --disable-jit --enable-utf --enable-unicode-properties --enable-newline-is-anycrlf"
+  local mf=
+
+  echo_progress "pcre: "
+
+  [ -d "${bld}/pcre" ] && {
+    rm -fr "${bld}/pcre"            || error "failed to remove pcre build directory"
+  }
+  mkdir -p "${bld}/pcre/pic"        || error "failed to create pcre/pic directory"
+  mkdir -p "${bld}/pcre/nonpic"     || error "failed to create pcre/nonpic directory"
+
+  [ "${do_32_bit}" = "yes" ] && {
+    mkdir -p "${bld}/pcre/pic32"    || error "failed to create pcre/pic32 directory"
+    mkdir -p "${bld}/pcre/nonpic32" || error "failed to create pcre/nonpic32 directory"
+  }
+
+  pushd "${bld}/pcre" > /dev/null 2>&1 # {
+
+    cflags="-DNR_OPTIMIZED_BUILD -pthread"
+
+    if [ "${systype}" = "darwin" -o "${systype}" = "linux64" -o "${systype}" = "solaris" ]; then
+      mf="-m64"
+    fi
+
+    echo_progress "configure(nonpic)..."
+    pushd nonpic > /dev/null 2>&1 # {
+      CFLAGS="${mf} ${CFLAGS} ${cflags}" CXXFLAGS="${mf} ${CXXFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" "${srcroot}/${pcre_dir}/configure" $@ \
+        --build=${cfgbuild} \
+        --prefix=${iroot} \
+        --program-prefix=nr- \
+        --libdir=${iroot}/lib${libsfx} \
+        ${cfgargs} > ${logdir}/pcre-nonpic.configure 2>&1       || error "pcre nonpic configure failed"
+
+      echo_progress "build(nonpic)..."
+      ${mymake} ${mymjf} V=1 > ${logdir}/pcre-nonpic.build 2>&1 || error "pcre nonpic build failed"
+
+      echo_progress "install(nonpic)..."
+      ${mymake} install > ${logdir}/pcre-nonpic.install 2>&1    || error "pcre nonpic install failed"
+    popd > /dev/null 2>&1 # }
+
+    echo_progress "configure(pic)..."
+    pushd pic > /dev/null 2>&1 # {
+      CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC -DPIC" CXXFLAGS="${mf} ${CXXFLAGS} ${cflags} -fPIC -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" "${srcroot}/${pcre_dir}/configure" $@ \
+        --build=${cfgbuild} \
+        --prefix=${iroot} \
+        --program-prefix=nr- \
+        --libdir=${iroot}/lib${libsfx} \
+        ${cfgargs} > ${logdir}/pcre-pic.configure 2>&1       || error "pcre pic configure failed"
+
+      echo_progress "build(pic)..."
+      ${mymake} ${mymjf} V=1 > ${logdir}/pcre-pic.build 2>&1 || error "pcre pic build failed"
+
+      echo_progress "install(pic)..."
+      cp -f .libs/libpcre.a ${iroot}/lib${libsfx}/libpcre-pic.a           > /dev/null 2>&1 || error "pcre pic install failed"
+      cp -f .libs/libpcrecpp.a ${iroot}/lib${libsfx}/libpcrecpp-pic.a     > /dev/null 2>&1 || error "pcrecpp pic install failed"
+      cp -f .libs/libpcreposix.a ${iroot}/lib${libsfx}/libpcreposix-pic.a > /dev/null 2>&1 || error "pcreposix pic install failed"
+    popd > /dev/null 2>&1 # }
+
+    if [ "${do_32_bit}" = "yes" ]; then
+      mf="-m32"
+
+      echo_progress "configure(nonpic32)..."
+      pushd nonpic32 > /dev/null 2>&1 # {
+        CFLAGS="${mf} ${CFLAGS} ${cflags}" CXXFLAGS="${mf} ${CXXFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" "${srcroot}/${pcre_dir}/configure" $@ \
+          --build=${cfgbuild32} \
+          --prefix=${iroot} \
+          --program-prefix=nr- \
+          --libdir=${iroot}/lib${libsfx32} \
+          ${cfgargs} > ${logdir}/pcre-nonpic32.configure 2>&1 || error "pcre nonpic32 configure failed"
+
+        echo_progress "build(nonpic32)..."
+        ${mymake} ${mymjf} V=1 > ${logdir}/pcre-nonpic32.build 2>&1 || error "pcre nonpic32 build failed"
+
+        echo_progress "install(nonpic32)..."
+        cp -f .libs/libpcre.a ${iroot}/lib${libsfx32}/libpcre.a           > /dev/null 2>&1 || error "pcre nonpic32 install failed"
+        cp -f .libs/libpcrecpp.a ${iroot}/lib${libsfx32}/libpcrecpp.a     > /dev/null 2>&1 || error "pcrecpp nonpic32 install failed"
+        cp -f .libs/libpcreposix.a ${iroot}/lib${libsfx32}/libpcreposix.a > /dev/null 2>&1 || error "pcreposix nonpic32 install failed"
+      popd > /dev/null 2>&1 # }
+
+      echo_progress "configure(pic32)..."
+      pushd pic32 > /dev/null 2>&1 # {
+        CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC -DPIC" CXXFLAGS="${mf} ${CXXFLAGS} ${cflags} -fPIC -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" "${srcroot}/${pcre_dir}/configure" $@ \
+          --build=${cfgbuild32} \
+          --prefix=${iroot} \
+          --program-prefix=nr- \
+          --libdir=${iroot}/lib${libsfx32} \
+          ${cfgargs} > ${logdir}/pcre-pic32.configure 2>&1       || error "pcre pic32 configure failed"
+
+        echo_progress "build(pic32)..."
+        ${mymake} ${mymjf} V=1 > ${logdir}/pcre-pic32.build 2>&1 || error "pcre pic32 build failed"
+
+        echo_progress "install(pic32)..."
+        cp -f .libs/libpcre.a ${iroot}/lib${libsfx32}/libpcre-pic.a           > /dev/null 2>&1 || error "pcre pic32 install failed"
+        cp -f .libs/libpcrecpp.a ${iroot}/lib${libsfx32}/libpcrecpp-pic.a     > /dev/null 2>&1 || error "pcrecpp pic32 install failed"
+        cp -f .libs/libpcreposix.a ${iroot}/lib${libsfx32}/libpcreposix-pic.a > /dev/null 2>&1 || error "pcreposix pic32 install failed"
+      popd > /dev/null 2>&1 # }
+    fi
+
+  popd > /dev/null 2>&1  # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/pcre" > /dev/null 2>&1
+  fi
+
+  common_lib_link pcre pcrecpp pcreposix
+  common_link bin pcregrep pcre-config pcretest
+}
+
+#
+# cURL. If you update the version of cURL you must be sure to check for new
+# protocol it may have added that we do not care to support. We are only
+# interested in HTTP and HTTPS, all of the others will just add bloat and you
+# must add the required --disable-whatever option to cfgargs below.
+#
+# This package installs a header (curlbuild.h) that contains platform-specific
+# settings discovered by configure and must therefore be wrapped for multilib
+# hosts.
+#
+compile_curl() {
+  local mf=
+  local cfgargs=""
+
+  cfgargs+=" --disable-dependency-tracking"
+  cfgargs+=" --disable-shared"
+  cfgargs+=" --enable-static"
+  cfgargs+=" --enable-http"
+  cfgargs+=" --enable-ftp"
+  cfgargs+=" --enable-file"
+  cfgargs+=" --disable-ldap"
+  cfgargs+=" --disable-ldaps"
+  cfgargs+=" --enable-proxy"
+  cfgargs+=" --disable-telnet"
+  cfgargs+=" --disable-tftp"
+  cfgargs+=" --disable-pop3"
+  cfgargs+=" --disable-imap"
+  cfgargs+=" --disable-smtp"
+  cfgargs+=" --disable-rtsp"
+  cfgargs+=" --disable-gopher"
+  cfgargs+=" --disable-dict"
+  cfgargs+=" --disable-manual"
+  cfgargs+=" --enable-libgcc"
+  cfgargs+=" --enable-nonblocking"
+  cfgargs+=" --enable-thread-resolver"
+  cfgargs+=" --disable-verbose"
+  cfgargs+=" --without-librtmp"
+  cfgargs+=" --without-libidn"
+  cfgargs+=" --disable-debug"
+  if [ "${do_debug}" = "yes" ] ; then
+    cfgargs+=" --disable-optimize" # Disable compiler optimizations
+    cfgargs+=" --enable-debug"     # Enable debug build options
+  else
+    cfgargs+=" --enable-optimize"
+    cfgargs+=" --disable-curldebug"
+  fi
+  cfgargs+=" --without-gnutls"
+
+  echo_progress "curl: "
+
+  [ -d "${bld}/curl" ] && {
+    rm -fr "${bld}/curl"        || error "failed to remove curl build directory"
+  }
+  mkdir -p "${bld}/curl/pic"    || error "failed to create curl/pic directory"
+  mkdir -p "${bld}/curl/nonpic" || error "failed to create curl/nonpic directory"
+
+  [ "${do_32_bit}" = "yes" ] && {
+    mkdir -p "${bld}/curl/pic32"    || error "failed to create curl/pic32 directory"
+    mkdir -p "${bld}/curl/nonpic32" || error "failed to create curl/nonpic32 directory"
+  }
+
+  pushd "${bld}/curl" > /dev/null 2>&1 # {
+
+    cflags="-pthread"
+    cppflags=" -DNR_OPTIMIZED_BUILD"
+
+    case "${systype}" in
+      darwin)
+        mf="-m64"
+        cacert='--with-ca-bundle=/etc/ssl/ca-bundle.crt'
+        ;;
+      solaris)
+        mf="-m64"
+        if [ -d /opt/local/etc/openssl/certs ]; then
+          cacert='--with-ca-path=/opt/local/etc/openssl/certs'
+        else
+          cacert='--with-ca-bundle=/etc/ssl/ca-bundle.crt'
+        fi
+        ;;
+      linux64 | freebsd64)
+        mf="-m64"
+        ;;
+    esac
+
+    echo_progress "configure(nonpic)..."
+    pushd nonpic > /dev/null 2>&1 # {
+      CFLAGS="${mf} ${CFLAGS} ${cflags}" CPPFLAGS="${cppflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" "${srcroot}/${curl_dir}/configure" $@ \
+        --build=${cfgbuild} \
+        --prefix=${iroot} \
+        --libdir=${iroot}/lib${libsfx} \
+        --with-ssl=${iroot} \
+        --program-prefix=nr- \
+        ${cfgargs} ${cacert} > ${logdir}/curl-nonpic.configure 2>&1 || error "curl nonpic configure failed"
+
+      echo_progress "build(nonpic)..."
+      ${mymake} ${mymjf} > ${logdir}/curl-nonpic.build 2>&1 || error "curl nonpic build failed"
+
+      echo_progress "install(nonpic)..."
+      ${mymake} install > ${logdir}/curl-nonpic.install 2>&1 || error "curl nonpic install failed"
+      mkdir -p "${iroot}/share/curl" > /dev/null 2>&1
+      cp -f "${srcroot}/curl-ca-bundle.crt" "${iroot}/share/curl/curl-ca-bundle.crt" > /dev/null 2>&1
+    popd > /dev/null 2>&1 # }
+
+    echo_progress "configure(pic)..."
+    pushd pic > /dev/null 2>&1 # {
+      CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC" CPPFLAGS="${cppflags} -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" "${srcroot}/${curl_dir}/configure" $@ \
+        --build=${cfgbuild} \
+        --prefix=${iroot} \
+        --libdir=${iroot}/lib${libsfx} \
+        --with-ssl=${iroot} \
+        --program-prefix=nr- \
+        ${cfgargs} > ${logdir}/curl-pic.configure 2>&1 || error "curl pic configure failed"
+
+      echo_progress "build(pic)..."
+      ${mymake} ${mymjf} > ${logdir}/curl-pic.build 2>&1 || error "curl pic build failed"
+
+      echo_progress "install(pic)..."
+      cp -f lib/.libs/libcurl.a ${iroot}/lib${libsfx}/libcurl-pic.a > /dev/null 2>&1 || error "curl pic install failed"
+    popd > /dev/null 2>&1 # }
+
+    if [ "${do_32_bit}" = "yes" ]; then
+      mf="-m32"
+
+      echo_progress "configure(nonpic32)..."
+      pushd nonpic32 > /dev/null 2>&1 # {
+        CFLAGS="${mf} ${CFLAGS} ${cflags}" CPPFLAGS="${cppflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" "${srcroot}/${curl_dir}/configure" $@ \
+          --build=${cfgbuild} \
+          --prefix=${iroot} \
+          --libdir=${iroot}/lib${libsfx32} \
+          --with-ssl=${iroot} \
+          --program-prefix=nr- \
+          ${cfgargs} > ${logdir}/curl-nonpic32.configure 2>&1   || error "curl nonpic32 configure failed"
+
+        echo_progress "build(nonpic32)..."
+        ${mymake} ${mymjf} > ${logdir}/curl-nonpic32.build 2>&1 || error "curl nonpic32 build failed"
+
+        echo_progress "install(nonpic32)..."
+        cp -f lib/.libs/libcurl.a ${iroot}/lib${libsfx32}/libcurl.a > /dev/null 2>&1 || error "curl nonpic32 install failed"
+      popd > /dev/null 2>&1 # }
+
+      echo_progress "configure(pic32)..."
+      pushd pic32 > /dev/null 2>&1 # {
+        CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC" CPPFLAGS="${cppflags} -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" "${srcroot}/${curl_dir}/configure" $@ \
+          --build=${cfgbuild} \
+          --prefix=${iroot} \
+          --libdir=${iroot}/lib${libsfx32} \
+          --with-ssl=${iroot} \
+          --program-prefix=nr- \
+          ${cfgargs} > ${logdir}/curl-pic32.configure 2>&1 || error "curl pic32 configure failed"
+
+        echo_progress "build(pic32)..."
+        ${mymake} ${mymjf} > ${logdir}/curl-pic32.build 2>&1 || error "curl pic32 build failed"
+
+        echo_progress "install(pic32)..."
+        cp -f lib/.libs/libcurl.a ${iroot}/lib${libsfx32}/libcurl-pic.a > /dev/null 2>&1 || error "curl pic32 install failed"
+      popd > /dev/null 2>&1 # }
+
+      echo_progress "headers..."
+      mv -f "${iroot}/include/curl/curlbuild.h" "${iroot}/include/curl/curlbuild-64.h" > /dev/null 2>&1 || error "moving header failed"
+      cp -f nonpic32/include/curl/curlbuild.h "${iroot}/include/curl/curlbuild-32.h"   > /dev/null 2>&1 || error "copying 32-bit header failed"
+      cat > "${iroot}/include/curl/curlbuild.h" <<EOF
+#ifdef __x86_64__
+#include <curl/curlbuild-64.h>
+#else
+#include <curl/curlbuild-32.h>
+#endif
+EOF
+      chmod 644 "${iroot}/include/curl/curlbuild.h"
+    fi
+
+  popd > /dev/null 2>&1 # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/curl" > /dev/null 2>&1
+  fi
+
+  common_lib_link curl
+  common_link bin curl curl-config
+}
+
+#
+# expat is a lightweight XML parser and is required by GDB. It has a permissive
+# license and can therefore be used in New Relic applications should the need
+# arise.
+#
+compile_expat() {
+  local mf=
+
+  echo_progress "expat: "
+
+  [ -d "${bld}/expat" ] && {
+    rm -fr "${bld}/expat"            || error "failed to remove expat build directory"
+  }
+  mkdir -p "${bld}/expat/pic"        || error "failed to create expat/pic directory"
+  mkdir -p "${bld}/expat/nonpic"     || error "failed to create expat/nonpic directory"
+
+  [ "${do_32_bit}" = "yes" ] && {
+    mkdir -p "${bld}/expat/pic32"    || error "failed to create expat/pic32 directory"
+    mkdir -p "${bld}/expat/nonpic32" || error "failed to create expat/nonpic32 directory"
+  }
+
+  pushd "${bld}/expat" > /dev/null 2>&1 # {
+
+    cflags="-DNR_OPTIMIZED_BUILD -pthread"
+
+    if [ "${systype}" = "darwin" -o "${systype}" = "linux64" -o "${systype}" = "solaris" ]; then
+      mf="-m64"
+    fi
+
+    echo_progress "configure(nonpic)..."
+    pushd nonpic > /dev/null 2>&1 #{
+      CFLAGS="${mf} ${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" "${srcroot}/${expat_dir}/configure" $@ \
+        --build=${cfgbuild} \
+        --prefix=${iroot} \
+        --libdir=${iroot}/lib${libsfx} \
+        --disable-shared \
+        --enable-static > ${logdir}/expat-nonpic.configure 2>&1 || error "expat nonpic configure failed"
+
+      echo_progress "build(nonpic)..."
+      ${mymake} ${mymjf} > ${logdir}/expat-nonpic.build 2>&1 || error "expat nonpic build failed"
+
+      echo_progress "install(nonpic)..."
+      ${mymake} install > ${logdir}/expat-nonpic.install 2>&1 || error "expat nonpic install failed"
+    popd > /dev/null 2>&1 # }
+
+  echo_progress "configure(pic)..."
+  pushd pic > /dev/null 2>&1 # {
+    CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" "${srcroot}/${expat_dir}/configure" $@ \
+      --build=${cfgbuild} \
+      --prefix=${iroot} \
+      --libdir=${iroot}/lib${libsfx} \
+      --disable-shared \
+      --enable-static > ${logdir}/expat-pic.configure 2>&1 || error "expat pic configure failed"
+
+    echo_progress "build(pic)..."
+    ${mymake} ${mymjf} > ${logdir}/expat-pic.build 2>&1 || error "expat pic build failed"
+
+    echo_progress "install(pic)..."
+    cp -f .libs/libexpat.a ${iroot}/lib${libsfx}/libexpat-pic.a > /dev/null 2>&1 || error "expat pic install failed"
+  popd > /dev/null 2>&1 # }
+
+  if [ "${do_32_bit}" = "yes" ]; then
+    mf="-m32"
+
+    echo_progress "configure(nonpic32)..."
+    pushd nonpic32 > /dev/null 2>&1 # {
+      CFLAGS="${mf} ${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" "${srcroot}/${expat_dir}/configure" $@ \
+        --build=${cfgbuild} \
+        --prefix=${iroot} \
+        --libdir=${iroot}/lib${libsfx32} \
+        --disable-shared \
+        --enable-static > ${logdir}/expat-nonpic32.configure 2>&1 || error "expat nonpic32 configure failed"
+
+      echo_progress "build(nonpic32)..."
+      ${mymake} ${mymjf} > ${logdir}/expat-nonpic32.build 2>&1 || error "expat nonpic32 build failed"
+
+      echo_progress "install(nonpic32)..."
+      cp -f .libs/libexpat.a ${iroot}/lib${libsfx32}/libexpat.a > /dev/null 2>&1 || error "expat nonpic32 install failed"
+    popd > /dev/null 2>&1 # }
+
+    echo_progress "configure(pic32)..."
+    pushd pic32 > /dev/null 2>&1 # {
+      CFLAGS="${mf} ${CFLAGS} ${cflags} -fPIC -DPIC" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" "${srcroot}/${expat_dir}/configure" $@ \
+        --build=${cfgbuild} \
+        --prefix=${iroot} \
+        --libdir=${iroot}/lib${libsfx32} \
+        --disable-shared \
+        --enable-static > ${logdir}/expat-pic32.configure 2>&1 || error "expat pic32 configure failed"
+
+      echo_progress "build(pic32)..."
+      ${mymake} ${mymjf} > ${logdir}/expat-pic32.build 2>&1 || error "expat pic32 build failed"
+
+      echo_progress "install(pic32)..."
+      cp -f .libs/libexpat.a ${iroot}/lib${libsfx32}/libexpat-pic.a > /dev/null 2>&1 || error "expat pic32 install failed"
+
+    popd > /dev/null 2>&1 # }
+  fi
+
+  popd > /dev/null 2>&1 # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/expat" > /dev/null 2>&1
+  fi
+
+  rm -f "${iroot}/bin/nr-xmlwf"
+  mv -f "${iroot}/bin/xmlwf" "${iroot}/bin/nr-xmlwf"
+
+  common_lib_link expat
+  common_link bin xmlwf
+}
+
+#
+# readline is a prompt management library. It has a restrictive license and may
+# therefore *NOT* be used in any New Relic application that is ever shipped
+# externally. It is required by GDB, but since that is an internal-only tool
+# it's use is permitted as part of NRCAMP. Since there is no possibility of
+# us ever needing to link this in to a shared library we do not need to build
+# any of the PIC versions of the library, which shortens the build a smidgeon.
+#
+compile_readline() {
+  local mf=
+
+  echo_progress "readline: "
+
+  [ -d "${bld}/readline" ] && {
+    rm -fr "${bld}/readline" || error "failed to remove readline build directory"
+  }
+  mkdir -p "${bld}/readline" || error "failed to create readline directory"
+
+  [ "${do_32_bit}" = "yes" ] && {
+    mkdir -p "${bld}/readline/build32" || error "failed to create readline/build32 directory"
+  }
+
+  pushd "${bld}/readline" > /dev/null 2>&1 # {
+
+    cflags="-DNR_OPTIMIZED_BUILD"
+
+    if [ "${systype}" = "darwin" -o "${systype}" = "linux64" -o "${systype}" = "solaris" ]; then
+      mf="-m64"
+    fi
+
+    echo_progress "configure..."
+    CFLAGS="${mf} ${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx}" libsuff="${libsfx}" "${srcroot}/${readline_dir}/configure" $@ \
+      --build=${cfgbuild} \
+      --prefix=${iroot} \
+      --libdir=${iroot}/lib${libsfx} \
+      --disable-shared \
+      --enable-static \
+      --with-curses > ${logdir}/readline.configure 2>&1 || error "readline nonpic configure failed"
+
+    echo_progress "build..."
+    ${mymake} ${mymjf} > ${logdir}/readline.build 2>&1 || error "readline nonpic build failed"
+
+    echo_progress "install..."
+    ${mymake} install > ${logdir}/readline.install 2>&1 || error "readline nonpic install failed"
+
+    if [ "${do_32_bit}" = "yes" ]; then
+      mf="-m32"
+
+      echo_progress "configure(32)..."
+      pushd build32 > /dev/null 2>&1 # {
+        CFLAGS="${mf} ${CFLAGS} ${cflags}" LDFLAGS="${LDFLAGS} -L${iroot}/lib${libsfx32}" libsuff="${libsfx32}" "${srcroot}/${readline_dir}/configure" $@ \
+          --build=${cfgbuild32} \
+          --prefix=${iroot} \
+          --libdir=${iroot}/lib${libsfx32} \
+          --disable-shared \
+          --enable-static \
+          --with-curses > ${logdir}/readline-32.configure 2>&1 || error "readline nonpic32 configure failed"
+
+        echo_progress "build(32)..."
+        ${mymake} ${mymjf} > ${logdir}/readline-32.build 2>&1 || error "readline nonpic32 build failed"
+
+        echo_progress "install(32)..."
+        cp -f libreadline.a ${iroot}/lib${libsfx32}/libreadline.a > /dev/null 2>&1 || error "readline32 install failed"
+        cp -f libhistory.a ${iroot}/lib${libsfx32}/libhistory.a > /dev/null 2>&1 || error "history32 install failed"
+      popd > /dev/null 2>&1 # }
+    fi
+
+  popd > /dev/null 2>&1 # }
+
+  if [ "${do_clean}" == "yes" ]  ; then
+    echo_progress "clean..."
+    rm -fr "${bld}/readline" > /dev/null 2>&1
+  fi
+}
+
+#
+# Compile GDB, the GNU debugger. The only tricky bit here is on Solaris, which
+# seems to have a problem with the configure script and mis-detects ncurses.
+# So, for that platform alone, we add -lncurses to CFLAGS so that we pick it
+# up. Otherwise, we get the ncurses headers but the SYSV library, and things
+# go pear-shaped rapidly after that.
+#
+# We also need to use the --without-libexpat-prefix configure option to stop
+# the configure script from trying to fish out the first libexpat.a that it
+# finds, which will be the one in ${iroot}/lib. However, that is the 32-bit
+# version on multilibed hosts, and we compile GDB in 64-bit mode on those
+# hosts, so we need to tell configure to just try -lexpat rather than trying
+# to be smart and find the library itself. That way the compiler picks up the
+# correct version in the 64-bit library directory.
+#
+compile_gdb() {
+  local acf=
+  local savecf="${CFLAGS}"
+
+  [ "${systype}" = "solaris" ] && {
+    if [ -f /usr/lib/libncurses.so ]; then
+      acf="-lncurses"
+    fi
+  }
+
+  CFLAGS="${CFLAGS} ${acf}" common_compile gdb gdb ${gdb_dir} gdb \
+    --build=${cfgbuild} \
+    --prefix=${iroot} \
+    --libdir=${iroot}/lib${libsfx} \
+    --with-system-gdbinit=${iroot}/etc/gdbinit \
+    --disable-werror \
+    --disable-sim \
+    --with-system-readline \
+    --with-expat \
+    --enable-tui \
+    --without-libunwind \
+    --enable-64-bit-bfd \
+    --disable-dependency-tracking \
+    --disable-maintainer-mode \
+    --without-libexpat-prefix \
+    --program-prefix=nr-
+
+  CFLAGS="${savecf}"
+  common_link bin gdb
+}
+
+#
+# We need to provide pkg-config so that other tools, for example ones used
+# during the compilation of NRLAMP, can read our config files.
+#
+compile_pkgconfig() {
+  local llist=
+
+  llist="${iroot}/lib:/usr/lib:/lib"
+
+  [ -n "${libsfx}" ] && {
+    llist="${llist}:${iroot}/lib${libsfx}:/usr/lib${libsfx}:/lib${libsfx}"
+  }
+
+  [ -n "${libsfx32}" ] && {
+    llist="${llist}:${iroot}/lib${libsfx32}:/usr/lib${libsfx32}:/lib${libsfx32}"
+  }
+
+  [ "x${libsfx}" = "x/64" ] || {
+    [ -d /usr/lib/64 ] && llist="${llist}:/usr/lib/64"
+    [ -d /lib/64 ] && llist="${llist}:/lib/64"
+  }
+
+  [ "x${libsfx32}" = "x/32" ] || {
+    [ -d /usr/lib/32 ] && llist="${llist}:/usr/lib/32"
+    [ -d /lib/32 ] && llist="${llist}:/lib/32"
+  }
+
+  local gnulibiconv=
+  if [ "${systype}" = "freebsd32" -o "${systype}" = "freebsd64" ]; then
+    gnulibiconv="--with-libiconv=gnu"
+  else
+    gnulibiconv=""
+  fi
+
+  common_compile pkgconfig pkgconfig ${pkgconfig_dir} pkgconfig \
+    --build=${cfgbuild} \
+    --prefix=${iroot} \
+    --libdir=${iroot}/lib \
+    --program-prefix=nr- \
+    --disable-shared \
+    --enable-static \
+    --with-pc-path="${iroot}/lib/pkgconfig:${iroot}/share/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig" \
+    --with-system-include-path="${iroot}/include:/usr/include" \
+    --with-system-library-path="${llist}" \
+    --with-internal-glib \
+    $gnulibiconv
+  common_link bin pkg-config
+}
+
+cleanup_final() {
+  echo_progress "cleanup: "
+
+  rm -fr "${pfx}/ofb" || error "error removing only-for-build directory"
+  rm -f "${pfx}/lib"/*.la "${pfx}/lib64"/*.la "${pfx}/lib/i386"/*.la "${pfx}/lib/amd64"/*.la > /dev/null 2>&1
+  rm -fr BUILD/gcc-bootstrap BUILD/gcc-final BUILD/llvm BUILD/initial || error "removing build detritus"
+
+  [ -n "${libsfx}" ] && {
+    if [ -d ${pfx}/lib/pkgconfig ]; then
+      mv -f ${pfx}/lib${libsfx}/pkgconfig/* ${pfx}/lib/pkgconfig/ > /dev/null 2>&1
+      rmdir ${pfx}/lib${libsfx}/pkgconfig > /dev/null 2>&1
+    else
+      mv -f ${pfx}/lib${libsfx}/pkgconfig ${pfx}/lib/pkgconfig > /dev/null 2>&1
+    fi
+  }
+
+  for tf in ${pfx}/lib/pkgconfig/*.pc; do
+    sed -e 's/-lz/-lnrz/g' -e 's/-lssl/-lnrssl/g' -e 's/-lcrypto/-lnrcrypto/g' -e 's/-lexpat/-lnrexpat/g' -e 's/-lpcre/-lnrpcre/g' ${tf} > ${tf}.new
+    cp -f ${tf}.new ${tf} > /dev/null 2>&1
+    rm -f ${tf}.new > /dev/null 2>&1
+  done
+}
+
+create_tarball() {
+  echo_progress "tarball: "
+
+  pfxbase="${pfx%/*}"
+  pfxname="${pfx##*/}"
+
+  pushd "${pfxbase}" > /dev/null 2>&1 # {
+    echo_progress "create..."
+    tar cf "${bld}/nrcamp-${systype}-${campver}.tar" $pfxname > /dev/null 2>&1 || error "failed to create tar file"
+    echo_progress "compress..."
+    rm -f "${bld}/nrcamp-${systype}-${campver}.tar.bz2" > /dev/null 2>&1 || error "failed to delete old archive"
+    bzip2 "${bld}/nrcamp-${systype}-${campver}.tar" > /dev/null 2>&1 || error "failed to compress final tar file"
+  popd > /dev/null 2>&1 # }
+}
+
+#
+# Now do everything in the correct sequence. This is actually where the script
+# starts.
+#
+resume initial initial_setup
+resume extract extract_sources
+
+CC="${CC} ${localbld}"
+CXX="${CXX} ${localbld}"
+CFLAGS="${CFLAGS} -I${iroot}/ofb/include"
+CXXFLAGS="${CXXFLAGS} -I${iroot}/ofb/include"
+LDFLAGS="-L${iroot}/ofb/lib"
+export CC CXX CFLAGS CXXFLAGS LDFLAGS
+
+resume patch compile_gnu_patch
+mypatch="${iroot}/bin/nr-patch"
+PATCH="${iroot}/bin/nr-patch"
+export PATCH
+
+resume do_patch patch_sources
+resume gmake    compile_gnu_make
+
+mymake="${iroot}/bin/nr-make"
+mymjf="-j${PARALLEL}"
+MAKE="${iroot}/bin/nr-make"
+export MAKE
+
+resume m4 compile_m4
+M4="${iroot}/bin/nr-m4"
+export M4
+
+resume help2man compile_help2man
+HELP2MAN=${iroot}/bin/help2man
+export HELP2MAN
+
+resume texinfo compile_texinfo
+MAKEINFO="${iroot}/bin/nr-makeinfo"
+INSTALL_INFO="${iroot}/bin/nr-install-info"
+INFO="${iroot}/bin/nr-info"
+export MAKEINFO INSTALL_INFO INFO
+
+resume bison2 compile_bison2 # bison2 (for percona builds)
+resume bison  compile_bison  # bison3
+
+YACC="${iroot}/bin/nr-bison -y"
+BISON="${iroot}/bin/nr-bison"
+export YACC BISON
+
+resume flex compile_flex
+LEX="${iroot}/bin/nr-flex -l"
+FLEX="${iroot}/bin/nr-flex"
+export LEX FLEX
+
+resume gmp1  compile_gmp
+resume mpfr1 compile_mpfr
+resume mpc1  compile_mpc
+
+if [ "${brief}" = "no" ] ; then
+
+resume binutils1    compile_binutils disable
+resume gcc_bootstrap compile_gcc bootstrap bootstrap
+
+#
+# Now that we have the initial compiler done we can use it to construct the
+# final bits. This essentially means we do the entire thing all over again
+# but this time using our new compiler and optimizations cranked up for
+# everything. When we build the final compiler and we are running in full
+# mode we will also build additional testing tools and run the test suites
+# on the compiler.
+#
+
+resume prepare_final prepare_final
+
+PATH="${pfx}/bin:${iroot}/bin:${dpath}"
+CC="${iroot}/bin/nr-gcc ${localbld}"
+CXX="${iroot}/bin/nr-g++ ${localbld}"
+#
+# We don't bother to compile the compiler stack with any debugging information.
+#
+CFLAGS="  -O2 -g0 ${gcc_strip} -I${pfx}/include -I${pfx}/ofb/include -L${pfx}/ofb/lib -L${pfx}/lib${libsfx}"
+CXXFLAGS="-O2 -g0 ${gcc_strip} -I${pfx}/include -I${pfx}/ofb/include -L${pfx}/ofb/lib -L${pfx}/lib${libsfx}"
+LDFLAGS="-L${pfx}/ofb/lib -L${pfx}/lib${libsfx}"
+export PATH CC CXX CFLAGS CXXFLAGS LDFLAGS
+iroot="${pfx}"
+logdir="${bld}/logs2"
+
+#
+# Some or all of packages are required by some versions of gcc we have used.
+#
+resume gmp2  compile_gmp
+resume mpfr2 compile_mpfr
+resume mpc2  compile_mpc
+resume isl compile_isl
+
+# gcc 4.8.3 and 4.9.1 don't need PPL, apparently.
+# gcc 4.9.1 can not even compile PPL.
+# resume ppl compile_ppl
+
+resume cloog compile_cloog
+
+resume binutils2 compile_binutils enable
+resume gcc_final compile_gcc final "" --disable-bootstrap
+
+PATH="${pfx}/bin:${dpath}"
+CC="${pfx}/bin/nr-gcc"
+CXX="${pfx}/bin/nr-g++"
+CFLAGS="-O3 ${gcc_gflag} ${gcc_strip}"
+CXXFLAGS="-O3 ${gcc_gflag} ${gcc_strip}"
+if [ "${systype}" = "darwin" -o "${systype}" = "solaris" ]; then
+  # Darwin doesn't use elf, so we don't need the copy-dt-needed-entries hack.
+  # Solaris uses the native linker which doesn't need it eithe.
+  LDFLAGS=""
+else
+  LDFLAGS="-Wl,--copy-dt-needed-entries"
+fi
+export PATH CC CXX CFLAGS CXXFLAGS LDFLAGS
+initial="no"
+
+#
+# The final GCC compiler suite is now done. Now we can go on to compile all of
+# the other bits, such as the auto* tools and, if we are doing a full build,
+# the test suite software. We recompile some of the tools with the final gcc
+# if they are going to form part of the installed NRCAMP.
+#
+resume m42 compile_m4
+M4="${pfx}/bin/nr-m4"
+export M4
+
+resume patch2 compile_gnu_patch
+mypatch="${pfx}/bin/nr-patch"
+PATCH="${pfx}/bin/nr-patch"
+export PATCH
+
+resume gmake2 compile_gnu_make
+mymake="${pfx}/bin/nr-make"
+mymjf="-j ${PARALLEL}"
+MAKE="${pfx}/bin/nr-make"
+export MAKE
+
+resume texinfo2 compile_texinfo
+MAKEINFO="${pfx}/bin/nr-makeinfo"
+INSTALL_INFO="${pfx}/bin/nr-install-info"
+INFO="${pfx}/bin/nr-info"
+export MAKEINFO INSTALL_INFO INFO
+
+# PHP 5.1 uses autoconf 213; all others use more recent ones.
+resume autoconf_213 compile_autoconf_213
+resume autoconf     compile_autoconf
+AUTOCONF="${pfx}/bin/nr-autoconf"
+AUTOHEADER="${pfx}/bin/nr-autoheader"
+AUTOSCAN="${pfx}/bin/nr-autoscan"
+AUTORECONF="${pfx}/bin/nr-autoreconf"
+AUTOUPDATE="${pfx}/bin/nr-autoupdate"
+export AUTOCONF AUTOHEADER AUTOSCAN AUTORECONF AUTOUPDATE
+
+# Different versions of PHP are sensitive to different versions of automake.
+resume automake_19  compile_automake_19
+resume automake_110 compile_automake_110
+resume automake_111 compile_automake_111
+resume automake     compile_automake
+AUTOMAKE="${pfx}/bin/nr-automake"
+ACLOCAL="${pfx}/bin/nr-aclocal"
+export AUTOMAKE ACLOCAL
+
+resume libtool_22 compile_libtool_22
+resume libtool    compile_libtool
+LIBTOOL="${pfx}/bin/nr-libtool"
+LIBTOOLIZE="${pfx}/bin/nr-libtoolize"
+export LIBTOOL LIBTOOLIZE
+
+if [ "${systype_qualifier}" != "Yosemite" -a "${systype_qualifier}" != "El Capitan" ] ; then
+  resume pkgconfig compile_pkgconfig
+  PKG_CONFIG="${pfx}/bin/nr-pkg-config"
+  export PKG_CONFIG
+else
+  if [ ! -x /usr/local/bin/pkg-config ] ; then
+    brew install pkg-config
+  fi
+  PKG_CONFIG=/usr/local/bin/pkg-config
+  export PKG_CONFIG
+fi
+
+resume bison2_2 compile_bison2 # bison2 (for percona builds)
+resume bison_2  compile_bison  # bison3
+
+YACC="${pfx}/bin/nr-yacc"
+BISON="${pfx}/bin/nr-bison"
+export YACC BISON
+
+resume flex2 compile_flex
+LEX="${pfx}/bin/nr-flex -l"
+FLEX="${pfx}/bin/nr-flex"
+export LEX FLEX
+
+# Technically this step isn't necessary, but now that pkgconfig is in place
+# the binutils build will pick up a larger suite of tools.
+resume binutils3 compile_binutils enable
+
+#
+# Now compile some libraries that we provide as part of the suite. This section
+# is what used to be called "NRLIBS". Unlike NRLIBS this now correctly compiles
+# things for multi-lib systems, and enables assembly instructions for both the
+# 32-bit and 64-bit Darwin builds, since each library is built separately. In
+# the NRLIBS world we built one library for Darwin universal builds which meant
+# that we had to disable assembler support. By compiling each library and
+# installing it in the right place, the Darwin driver still enables us to create
+# "fat" or "universal" binaries by correctly linking in the appropriate library
+# and then stitching the results together with lipo. This is a far better way of
+# doing things than what we did in NRLIBS. Also new to the NRLIBS collection,
+# and only because they are required for building gdb, are expat and readline.
+# No New Relic application should ever link with readline, it has undesirable
+# licensing implications.
+#
+resume openssl compile_openssl
+resume zlib compile_zlib
+resume bzip2 compile_bzip2
+resume pcre compile_pcre
+resume curl compile_curl
+resume expat compile_expat
+
+# Readline is only here for gdb and cmake. Readline has a toxically viral GPL license.
+resume readline compile_readline
+
+# cmake is here only here for building percona (sql) and llvm.
+if [ "${systype_qualifier}" != "Yosemite" -a "${systype_qualifier}" != "El Capitan" ] ; then
+  resume cmake compile_cmake
+else
+  #
+  # cmake 3.1.0 seems to run afoul of Yosemite include/dispatch/object.h
+  #
+  if [ ! -x /usr/local/bin/cmake ] ; then
+    brew install cmake
+  fi
+  pushd /opt/nr/camp/bin > /dev/null 2>&1 # {
+    ln -s /usr/local/bin/cmake    cmake || true
+    ln -s /usr/local/bin/cmake nr-cmake || true
+  popd > /dev/null 2>&1 # }
+fi
+
+if [ "${systype_qualifier}" != "Yosemite" -a "${systype_qualifier}" != "El Capitan" ] ; then
+  #
+  # valgrind is probably hopeless for Yosemite; it constantly lags behind.
+  #
+  # See this page
+  #   http://stackoverflow.com/questions/26564125/yosemite-and-valgrind
+  # for updates
+  #
+  resume valgrind compile_valgrind
+fi
+
+resume prepare_llvm prepare_llvm
+resume compile_llvm compile_llvm
+
+if [ "${systype_qualifier}" != "Yosemite" -a "${systype_qualifier}" != "El Capitan" ] ; then
+  #
+  # gdb is probably hopeless on Yosemite.  Use the one from brew.
+  #
+  # Then see this page
+  #   http://ntraft.com/installing-gdb-on-os-x-mavericks/
+  # for a discussion on gdb, and all the steps necessary to self sign
+  # a code sign for gdb
+  #
+  resume gdb compile_gdb
+fi
+
+fi  # non-brief build
+
+#
+# Build useful preprocessing tools to compile DSLs
+#
+resume re2c       compile_re2c
+resume protobuf   compile_protobuf
+resume protobuf_c compile_protobuf_c
+resume ragel      compile_ragel
+
+resume ctags compile_ctags
+
+#
+# Now remove some build-only stuff and create the final tarball.
+#
+resume cleanup cleanup_final
+resume tarball create_tarball
+
+#
+# We're outta here!
+#
+step_number=
+exit 0
+
+# }]  # DO NOT REMOVE (vim file spanning brace matching)
