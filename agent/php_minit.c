@@ -236,6 +236,54 @@ static char* nr_php_check_for_upgrade_license_key(void) {
   return 0;
 }
 
+static nr_status_t nr_php_check_8T_DT_config(TSRMLS_D) {
+  /* check if infinite tracing is enabled and DT disabled */
+  if (!nr_strempty(NRINI(trace_observer_host))
+      && !NRINI(distributed_tracing_enabled)) {
+    nrl_warning(
+        NRL_INIT,
+        "Infinite tracing will be DISABLED because distributed tracing is"
+        " disabled and infinite tracing requires distributed tracing to be "
+        "enabled.  Please check the"
+        " value of 'newrelic.distributed_tracing_enabled' in the agent "
+        "configuration.");
+    return NR_FAILURE;
+  }
+  return NR_SUCCESS;
+}
+
+/*
+ * @brief Check the INI values for 'logging_enabled' and
+ *        'log_forwarding_enabled' and log a warning on
+ *        invalid configuration state.
+ *
+ */
+static void nr_php_check_logging_config(TSRMLS_D) {
+  if (!NRINI(logging_enabled) && NRINI(log_forwarding_enabled)) {
+    nrl_warning(NRL_INIT,
+                "Log Forwarding will be DISABLED because logging is disabled. "
+                "Log Forwarding requires Logging to be enabled. Please check "
+                "'newrelic.application_logging.logging.enabled' in the agent "
+                "configuration.");
+  }
+}
+
+/*
+ * @brief Check the INI values for 'log_forwarding_enabled'
+ *        and 'high_security' and log a warning on invalid
+ *        configuration state.
+ *
+ */
+static void nr_php_check_high_security_log_forwarding(TSRMLS_D) {
+  if (NR_PHP_PROCESS_GLOBALS(high_security) && NRINI(log_forwarding_enabled)) {
+    nrl_warning(
+        NRL_INIT,
+        "Log Forwarding will be DISABLED because High Security mode "
+        "is enabled. Please check 'newrelic.high_security' in the agent "
+        "configuration.");
+  }
+}
+
 static char* nr_php_get_agent_specific_info(void) {
   const char* php_version;
   const char* zend_type;
@@ -552,6 +600,19 @@ PHP_MINIT_FUNCTION(newrelic) {
   if (0 == NR_PHP_PROCESS_GLOBALS(cli)) {
     nr_agent_close_daemon_connection();
   }
+
+  /* Do some sanity checking of configuration settings and handle accordingly */
+
+  /* If infinite tracing (8T) is enabled but distributed tracing (DT) is
+   * disabled this is an unworkable combination because span IDs cannot be
+   * assigned to segments and this causes problems in
+   * axiom/nr_segment.c::nr_segment_to_span_event() Output a warning about this
+   * config issue and also that 8T will be disabled
+   */
+  nr_php_check_8T_DT_config(TSRMLS_C);
+
+  nr_php_check_logging_config(TSRMLS_C);
+  nr_php_check_high_security_log_forwarding(TSRMLS_C);
 
   /*
    * Save the original PHP hooks and then apply our own hooks. The agent is

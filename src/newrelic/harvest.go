@@ -6,6 +6,7 @@
 package newrelic
 
 import (
+	"strconv"
 	"time"
 
 	"newrelic/collector"
@@ -26,8 +27,10 @@ type Harvest struct {
 	CustomEvents      *CustomEvents
 	ErrorEvents       *ErrorEvents
 	SpanEvents        *SpanEvents
+	LogEvents         *LogEvents
 	commandsProcessed int
 	pidSet            map[int]struct{}
+	httpErrorSet      map[int]float64
 }
 
 func NewHarvest(now time.Time, hl collector.EventConfigs) *Harvest {
@@ -42,6 +45,7 @@ func NewHarvest(now time.Time, hl collector.EventConfigs) *Harvest {
 		SpanEvents:        NewSpanEvents(hl.SpanEventConfig.Limit),
 		commandsProcessed: 0,
 		pidSet:            make(map[int]struct{}),
+		httpErrorSet:      make(map[int]float64),
 	}
 }
 
@@ -67,6 +71,47 @@ func createTraceObserverMetrics(to *infinite_tracing.TraceObserver, metrics *Met
 	}
 }
 
+func (h *Harvest) createHttpErrorMetrics() {
+	if h.empty() {
+		// No agent data received, do not create derived metrics. This allows
+		// upstream to detect inactivity sooner.
+		return
+	}
+
+	for code, val := range h.httpErrorSet {
+		h.Metrics.AddCount("Supportability/Agent/Collector/HTTPError/"+strconv.Itoa(code), "", val, Forced)
+	}
+}
+
+// Update the Http error counts
+func (h *Harvest) IncrementHttpErrors(statusCode int) {
+	if h.empty() {
+		// No agent data received, do not create derived metrics. This allows
+		// upstream to detect inactivity sooner.
+		return
+	}
+	counter, isPresent := h.httpErrorSet[statusCode]
+
+	if isPresent {
+		h.httpErrorSet[statusCode] = counter + 1
+	} else {
+		h.httpErrorSet[statusCode] = 1
+	}
+}
+
+func (h *Harvest) createEndpointAttemptsMetric(endpoint string, val float64) {
+	if h.empty() {
+		// No agent data received, do not create derived metrics. This allows
+		// upstream to detect inactivity sooner.
+		return
+	}
+
+	if val > 0 {
+		h.Metrics.AddCount("Supportability/Agent/Collector/"+endpoint+"/Attempts", "", val, Forced)
+	}
+
+}
+
 func (h *Harvest) createFinalMetrics(harvestLimits collector.EventHarvestConfig, to *infinite_tracing.TraceObserver) {
 	if h.empty() {
 		// No agent data received, do not create derived metrics. This allows
@@ -87,17 +132,21 @@ func (h *Harvest) createFinalMetrics(harvestLimits collector.EventHarvestConfig,
 	// Custom Events Supportability Metrics
 	h.Metrics.AddCount("Supportability/Events/Customer/Seen", "", h.CustomEvents.NumSeen(), Forced)
 	h.Metrics.AddCount("Supportability/Events/Customer/Sent", "", h.CustomEvents.NumSaved(), Forced)
+	h.createEndpointAttemptsMetric(h.CustomEvents.Cmd(), h.CustomEvents.NumFailedAttempts())
 
 	// Transaction Events Supportability Metrics
 	// Note that these metrics used to have different names:
 	//   Supportability/RequestSampler/requests
 	//   Supportability/RequestSampler/samples
+
 	h.Metrics.AddCount("Supportability/AnalyticsEvents/TotalEventsSeen", "", h.TxnEvents.NumSeen(), Forced)
 	h.Metrics.AddCount("Supportability/AnalyticsEvents/TotalEventsSent", "", h.TxnEvents.NumSaved(), Forced)
+	h.createEndpointAttemptsMetric(h.TxnEvents.Cmd(), h.TxnEvents.NumFailedAttempts())
 
 	// Error Events Supportability Metrics
 	h.Metrics.AddCount("Supportability/Events/TransactionError/Seen", "", h.ErrorEvents.NumSeen(), Forced)
 	h.Metrics.AddCount("Supportability/Events/TransactionError/Sent", "", h.ErrorEvents.NumSaved(), Forced)
+	h.createEndpointAttemptsMetric(h.ErrorEvents.Cmd(), h.ErrorEvents.NumFailedAttempts())
 
 	if h.Metrics.numDropped > 0 {
 		h.Metrics.AddCount("Supportability/MetricsDropped", "", float64(h.Metrics.numDropped), Forced)
@@ -106,6 +155,7 @@ func (h *Harvest) createFinalMetrics(harvestLimits collector.EventHarvestConfig,
 	// Span Events Supportability Metrics
 	h.Metrics.AddCount("Supportability/SpanEvent/TotalEventsSeen", "", h.SpanEvents.analyticsEvents.NumSeen(), Forced)
 	h.Metrics.AddCount("Supportability/SpanEvent/TotalEventsSent", "", h.SpanEvents.analyticsEvents.NumSaved(), Forced)
+	h.createEndpointAttemptsMetric(h.SpanEvents.Cmd(), h.SpanEvents.analyticsEvents.NumFailedAttempts())
 
 	// Certificate supportability metrics.
 	if collector.CertPoolState == collector.SystemCertPoolMissing {
@@ -119,7 +169,11 @@ func (h *Harvest) createFinalMetrics(harvestLimits collector.EventHarvestConfig,
 	h.Metrics.AddCount("Supportability/EventHarvest/ErrorEventData/HarvestLimit", "", float64(harvestLimits.EventConfigs.ErrorEventConfig.Limit), Forced)
 	h.Metrics.AddCount("Supportability/EventHarvest/SpanEventData/HarvestLimit", "", float64(harvestLimits.EventConfigs.SpanEventConfig.Limit), Forced)
 
+	h.createEndpointAttemptsMetric(h.Metrics.Cmd(), h.Metrics.NumFailedAttempts())
+
 	createTraceObserverMetrics(to, h.Metrics)
+
+	h.createHttpErrorMetrics()
 }
 
 type FailedHarvestSaver interface {
