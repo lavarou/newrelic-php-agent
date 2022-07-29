@@ -12,7 +12,14 @@ If your collector isn’t the default (collector.newrelic.com), set the `NEWRELI
 
 PHP_VER can also be set, but hasn’t been tested beyond `8.0`.
 
-Set all environment variables prior to running the development environment.  
+Set all environment variables prior to running the development environment like this:
+
+`NEW_RELIC_LICENSE_KEY=<LICENSE_KEY> NEW_RELIC_COLLECTOR_HOST=collector.newrelic.com PHP_VER=<VERSION> make <DEV_TARGET>`
+
+Replace:
+- `<LICENSE_KEY>` with your license key
+- `<VERSION>` with PHP version you'd like to work with, e.g. 8.0 or 7.4
+- `<DEV_TARGET>` with one of the options described below
 
 ## Options for using the environment
 

@@ -50,6 +50,8 @@ services:
     build:
       context: .
       dockerfile: files/Dockerfile
+      args:
+        PHP_VER: ${PHP_VER}
     user: ${UID}:${GID}
     environment:
       MEMCACHE_HOST: memcached
