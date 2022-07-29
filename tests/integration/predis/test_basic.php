@@ -9,6 +9,11 @@ The agent SHALL report Datastore metrics for Redis basic operations.
 This Predis test is largely copied from the Redis version.
 */
 
+/*INI
+newrelic.datastore_tracer.database_name_reporting.enabled = 1
+newrelic.datastore_tracer.instance_reporting.enabled = 1
+*/
+
 /*EXPECT
 ok - set key
 ok - get key
@@ -17,9 +22,11 @@ ok - delete missing key
 ok - reuse deleted key
 ok - set duplicate key
 ok - delete key
+ok - trace nodes match
+ok - datastore instance metric exists
 */
 
-/*EXPECT_METRICS
+/*
 [
   "?? agent run id",
   "?? start time",
@@ -58,6 +65,9 @@ require_once(__DIR__.'/../../include/config.php');
 require_once(__DIR__.'/../../include/helpers.php');
 require_once(__DIR__.'/../../include/tap.php');
 require_once(__DIR__.'/predis.inc');
+require_once(realpath (dirname ( __FILE__ )) . '/../../include/integration.php');
+
+use NewRelic\Integration\Transaction;
 
 function test_basic() {
   global $REDIS_HOST, $REDIS_PORT;
@@ -94,3 +104,81 @@ function test_basic() {
 }
 
 test_basic();
+
+function redis_datastore_instance_metric_exists(Transaction $txn)
+{
+  global $REDIS_HOST, $REDIS_PORT;
+
+  $metrics = $txn->getUnscopedMetrics();
+  $host = newrelic_is_localhost($REDIS_HOST) ? newrelic_get_hostname() : $REDIS_HOST;
+  $port = (string) $REDIS_PORT;
+  tap_assert(isset($metrics["Datastore/instance/Redis/$host/$port"]), 'datastore instance metric exists');
+}
+
+function redis_trace_nodes_match(Transaction $txn, array $operations)
+{
+  global $REDIS_HOST, $REDIS_PORT;
+
+  $ok = true;
+  $trace = $txn->getTrace();
+  $nodes = iterator_to_array($trace->findSegmentsWithDatastoreInstances());
+
+  /*
+   *  array_flip() gives us an array with the expected operations as keys
+   * (effectively a string set), which means we can do simple hashmap lookups
+   * for each operation rather than walking the array each time.
+  */
+  $expected = array_flip($operations);
+
+  /*
+   * Ensure that there are no unexpected operation types, and that whatever
+   * nodes exist have instance information. We can't do more than that because
+   * extremely fast Redis operations may not generate trace nodes, which then
+   * leads to test instability.
+   *
+   * Since we don't know how many nodes we're going to get, we can't use
+   * tap_assert(), since it will generate a variable number of assertion
+   * messages and the test runner isn't smart enough to figure that out.
+   * Instead, if something fails, we'll use tap_not_ok() to generate an
+   * unexpected failure message with (hopefully) useful state.
+   */
+  foreach ($nodes as $i => $node) {
+    if (!array_key_exists($node->name, $expected)) {
+      tap_not_ok("trace node $i operation is not in the expected list", implode('; ', $operations), $node->name);
+      $ok = false;
+    }
+
+    $instance = $node->getDatastoreInstance();
+
+    if (!$instance->isHost($REDIS_HOST)) {
+      tap_not_ok("trace node $i host does not match", $REDIS_HOST, $instance->host);
+      $ok = false;
+    }
+
+    if ($REDIS_PORT != $instance->portPathOrId) {
+      tap_not_ok("trace node $i port does not match", $REDIS_PORT, $instance->portPathOrId);
+      $ok = false;
+    }
+
+    if ('0' !== $instance->databaseName) {
+      tap_not_ok("trace node $i database does not match", '0', $instance->databaseName);
+      $ok = false;
+    }
+  }
+
+  if ($ok) {
+    tap_ok('trace nodes match');
+  }
+}
+
+$txn = new Transaction;
+
+redis_trace_nodes_match($txn, array(
+  'Datastore/operation/Redis/del',
+  'Datastore/operation/Redis/exists',
+  'Datastore/operation/Redis/get',
+  'Datastore/operation/Redis/set',
+  'Datastore/operation/Redis/setnx',
+));
+
+redis_datastore_instance_metric_exists($txn);
