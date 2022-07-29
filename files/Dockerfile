@@ -103,18 +103,18 @@ RUN if [ -z "$(grep '^8\.' /etc/debian_version)" ]; then \
 WORKDIR /usr/src
 
 # based on https://getcomposer.org/doc/faqs/how-to-install-composer-programmatically.md
-RUN \
- EXPECTED_CHECKSUM="$(php -r 'copy("https://composer.github.io/installer.sig", "php://stdout");')" \
- && php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
- && ACTUAL_CHECKSUM="$(php -r "echo hash_file('sha384', 'composer-setup.php');")" \
- && if [ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]; \
-  then \
-    >&2 echo 'ERROR: Invalid installer checksum'; \
-    rm composer-setup.php; \
-    exit 1; \
-  fi \
- && php composer-setup.php \
- && php -r "unlink('composer-setup.php');"
+#RUN \
+# EXPECTED_CHECKSUM="$(php -r 'copy("https://composer.github.io/installer.sig", "php://stdout");')" \
+# && php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');" \
+# && ACTUAL_CHECKSUM="$(php -r "echo hash_file('sha384', 'composer-setup.php');")" \
+# && if [ "$EXPECTED_CHECKSUM" != "$ACTUAL_CHECKSUM" ]; \
+#  then \
+#    >&2 echo 'ERROR: Invalid installer checksum'; \
+#    rm composer-setup.php; \
+#    exit 1; \
+#  fi \
+# && php composer-setup.php \
+# && php -r "unlink('composer-setup.php');"
 
 #
 # The explain plan in the sql tests contain partition/filtered properties
@@ -136,14 +136,14 @@ RUN docker-php-ext-install pdo pdo_mysql
 RUN docker-php-ext-install mysqli
 
 # redis
-RUN pecl install redis && docker-php-ext-enable redis
+#RUN pecl install redis && docker-php-ext-enable redis
 
 # memcache
-RUN pecl install memcache && docker-php-ext-enable memcache
+# RUN pecl install memcache && docker-php-ext-enable memcache
 
 # memcached
-RUN apt-get install -y libmemcached-dev
-RUN pecl install memcached && docker-php-ext-enable memcached
+# RUN apt-get install -y libmemcached-dev
+# RUN pecl install memcached && docker-php-ext-enable memcached
 
 # mongo?
 # this extension is no longer maintained and doesn't work with
@@ -154,16 +154,16 @@ RUN pecl install memcached && docker-php-ext-enable memcached
 #RUN pecl install mongodb && docker-php-ext-enable mongodb
 
 # uopz
-RUN pecl install uopz && docker-php-ext-enable uopz
+#RUN pecl install uopz && docker-php-ext-enable uopz
 
 # configure uopz to honor exit() and die() otherwise it just ignores these
-RUN echo "uopz.exit=1" > /usr/local/etc/php/conf.d/uopz-enable-exit.ini
+#RUN echo "uopz.exit=1" > /usr/local/etc/php/conf.d/uopz-enable-exit.ini
 
 # install predis
 # installation will be in /usr/src/vendor/predis/predis
 # which is value which should be used for PREDIS_HOME
-RUN php composer.phar require "predis/predis"
-RUN php composer.phar update
+#RUN php composer.phar require "predis/predis"
+#RUN php composer.phar update
 
 #
 # These args need to be repeated so we can propagate the VARS within this build context.
