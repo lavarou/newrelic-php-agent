@@ -23,10 +23,9 @@ ok - reuse deleted key
 ok - set duplicate key
 ok - delete key
 ok - trace nodes match
-ok - datastore instance metric exists
 */
 
-/*
+/*EXPECT_METRICS
 [
   "?? agent run id",
   "?? start time",
@@ -38,7 +37,7 @@ ok - datastore instance metric exists
     [{"name":"Datastore/allOther"},                                                      [8, "??", "??", "??", "??", "??"]],
     [{"name":"Datastore/Redis/all"},                                                     [8, "??", "??", "??", "??", "??"]],
     [{"name":"Datastore/Redis/allOther"},                                                [8, "??", "??", "??", "??", "??"]],
-    [{"name":"Datastore/instance/Redis/__HOST__/6379"},                                  [8, "??", "??", "??", "??", "??"]],
+    [{"name":"Datastore/instance/Redis/ENV[REDIS_HOST]/6379"},                           [8, "??", "??", "??", "??", "??"]],
     [{"name":"Datastore/operation/Redis/del"},                                           [3, "??", "??", "??", "??", "??"]],
     [{"name":"Datastore/operation/Redis/del","scope":"OtherTransaction/php__FILE__"},    [3, "??", "??", "??", "??", "??"]],
     [{"name":"Datastore/operation/Redis/exists"},                                        [1, "??", "??", "??", "??", "??"]],
@@ -180,5 +179,3 @@ redis_trace_nodes_match($txn, array(
   'Datastore/operation/Redis/set',
   'Datastore/operation/Redis/setnx',
 ));
-
-redis_datastore_instance_metric_exists($txn);
