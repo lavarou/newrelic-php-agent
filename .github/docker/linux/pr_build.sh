@@ -128,7 +128,7 @@ EOF
   printf \\n
   printf "building agent (PHP=%s)\n" "$PHPS"
   make agent-clean
-  make -r -s -j $(nproc) agent "ARCH=${ARCH}"
+  make -r -j $(nproc) agent "ARCH=${ARCH}"
 
 
   printf \\n
@@ -157,10 +157,10 @@ EOF
       *embed*)
         if [ -n "$do_valgrind" ]; then
           printf 'grinding agent unit tests\n'
-          make -r -s -j $(nproc) agent-valgrind "ARCH=${ARCH}" LDFLAGS='-Wl,-z,muldefs'
+          make -r -j $(nproc) agent-valgrind "ARCH=${ARCH}" LDFLAGS='-Wl,-z,muldefs'
         else
           printf 'running agent unit tests\n'
-          make -r -s -j $(nproc) agent-check "ARCH=${ARCH}" LDFLAGS='-Wl,-z,muldefs'
+          make -r -j $(nproc) agent-check "ARCH=${ARCH}" LDFLAGS='-Wl,-z,muldefs'
         fi
 	;;
       *)
