@@ -238,6 +238,7 @@ jobs:
     #     username: ${{ secrets.DOCKER_REPO_USER }}
     #     password: ${{ secrets.DOCKER_USER_TOKEN }}
     strategy:
+      fail-fast: false
       matrix:
         # registry: [mycirrus]
         # image_os: ['newrelic:nr-centos8-1.1', 'newrelic:nr-centos7-1.3', 'newrelic:nr-alpine-3.14--1.2', 'newrelic:nr-alpine3.4-1.1']
@@ -272,7 +273,7 @@ jobs:
         run: |
           echo "current directory is " $(pwd)
           ls -la
-
+ 
       - name: Check php-build-scripts
         run: |
           echo "current directory is " $(pwd)
@@ -380,6 +381,7 @@ jobs:
       PHP_VER: ${{ matrix.php_ver }}
       SECRETS_MK: ${{ secrets.SECRETS_MK }}
     strategy:
+      fail-fast: false
       matrix:
         # registry: [mycirrus]
         # image_os: ['newrelic:nr-centos8-1.1', 'newrelic:nr-centos7-1.3', 'newrelic:nr-alpine-3.14--1.2', 'newrelic:nr-alpine3.4-1.1']
@@ -478,6 +480,7 @@ jobs:
       PHP_VER: ${{ matrix.php_ver }}
       SECRETS_MK: ${{ secrets.SECRETS_MK }}
     strategy:
+      fail-fast: false
       matrix:
         # registry: [mycirrus]
         # image_os: ['newrelic:nr-centos8-1.1', 'newrelic:nr-centos7-1.3', 'newrelic:nr-alpine-3.14--1.2', 'newrelic:nr-alpine3.4-1.1']
@@ -549,20 +552,24 @@ jobs:
           echo "${SECRETS_MK}" > make/secrets.mk
 
       # GHA: build complains it cannot find phpize
-      - name: 'Test call phpvm.bash'
+      - name: 'Test call phpvm.bash and run make commands'
         run: |
           set -x
           echo "Calling phpvm.bash"
           source php-build-scripts/bin/phpvm.bash change ${{ matrix.php_ver }}
-
-      # GHA: Run Make command
-      - name: Run Make commands
-        if: ${{ success() }}
-        run: |
           make clean
           # make daemon_tests
           make valgrind
           make integration
+
+      # GHA: Run Make command
+      # - name: Run Make commands
+      #   if: ${{ success() }}
+      #   run: |
+      #     make clean
+      #     # make daemon_tests
+      #     make valgrind
+      #     make integration
 
 
   # GHA renamed for better readability ⇓
