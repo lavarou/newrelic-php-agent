@@ -20,6 +20,7 @@ on:
       - main
       - 'php8'
       - 'dev'
+      - arm64
   pull_request:
     branches: 
       - main
@@ -38,8 +39,9 @@ jobs:
     strategy:
       matrix:
         os: [linux]
-        php_ver: ['7.0', '7.1-zts', '7.2', '7.3', '7.4', '8.0', '8.0-zts', '8.1', '8.1-zts']
-        arch: ['x64', 'x86']
+        #php_ver: ['7.0', '7.1-zts', '7.2', '7.3', '7.4', '8.0', '8.0-zts', '8.1', '8.1-zts']
+        php_ver: ['7.4']
+        arch: ['arm64', 'amd64']
         exclude:
         # Excludes PHP 5.x, 7.x on linux 32-bit
         # Excludes PHP 8.x as only 64bit is supported for these versions
@@ -73,7 +75,12 @@ jobs:
     steps:
       - name: Checkout Repo 
         uses: actions/checkout@v2
+      - name: Enable arm64 emulation
+        run: |
+          docker run --privileged --rm tonistiigi/binfmt --install arm64
+          ls -l /proc/sys/fs/binfmt_misc/
+          docker run --platform linux/$ARCH --rm alpine uname -a
       - name: Build Custom Docker Image
-        run: docker build --build-arg ARCH=$ARCH --build-arg PHP_VER=$PHP_VER --build-arg BUILD_TYPE=$BUILD_TYPE -f ./.github/docker/${OS}/${ARCH}/Dockerfile -t $image_name .
+        run: docker build --platform linux/$ARCH --build-arg ARCH=$ARCH --build-arg PHP_VER=$PHP_VER --build-arg BUILD_TYPE=$BUILD_TYPE -f ./.github/docker/${OS}/Dockerfile -t $image_name .
       - name: Build and Test
-        run: docker run --name runtest --workdir /github/workspace --rm -e GITHUB_WORKSPACE -e GITHUB_ENV -v "${GITHUB_WORKSPACE}":"/github/workspace" $image_name
+        run: docker run --platform linux/$ARCH --name runtest --workdir /github/workspace --rm -e GITHUB_WORKSPACE -e GITHUB_ENV -v "${GITHUB_WORKSPACE}":"/github/workspace" $image_name
