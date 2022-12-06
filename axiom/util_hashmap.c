@@ -88,6 +88,43 @@ void nr_hashmap_apply(nr_hashmap_t* hashmap,
   }
 }
 
+struct nr_hashmap_stats nr_hashmap_inspect(nr_hashmap_t* hashmap) {
+  struct nr_hashmap_stats stats = {};
+  size_t count, i, collisions;
+
+  stats.elements = nr_hashmap_count(hashmap);
+  stats.collisions_min = stats.elements;
+  count = nr_hashmap_count_buckets(hashmap);
+
+  for (i = 0; i < count; i++) {
+    nr_hashmap_bucket_t* bucket;
+    if (0 == hashmap->buckets[i]) {
+      continue;
+    }
+
+    stats.buckets_used++;
+
+    collisions = 0;
+    for (bucket = hashmap->buckets[i]; bucket; bucket = bucket->next) {
+      collisions++;
+    }
+    if (collisions < stats.collisions_min) {
+      stats.collisions_min = collisions;
+    }
+    if (collisions > stats.collisions_max) {
+      stats.collisions_max = collisions;
+    }
+    if (collisions > 1) {
+      stats.buckets_with_collisions++;
+      stats.collisions_mean += collisions;
+    }
+  }
+
+  stats.collisions_mean /= stats.buckets_with_collisions;
+
+  return stats;
+}
+
 size_t nr_hashmap_count(const nr_hashmap_t* hashmap) {
   if (NULL == hashmap) {
     return 0;

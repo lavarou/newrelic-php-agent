@@ -22,6 +22,16 @@
  */
 typedef struct _nr_hashmap_t nr_hashmap_t;
 
+struct nr_hashmap_stats {
+  size_t elements;
+  size_t buckets_used;
+  size_t collisions_min;
+  size_t collisions_max;
+  size_t collisions_mean;
+  size_t buckets_with_collisions;
+};
+
+extern struct nr_hashmap_stats nr_hashmap_inspect(nr_hashmap_t* hashmap);
 /*
  * Type declaration for apply functions.
  */

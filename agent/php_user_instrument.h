@@ -172,6 +172,8 @@ extern int nr_zend_call_orig_execute_special(nruserfn_t* wraprec,
  */
 extern void nr_php_destroy_user_wrap_records(void);
 
+extern void nr_php_user_instrument_lookup_stats(void);
+
 /*
  * Purpose : Add a callback that is fired when a function is declared.
  *

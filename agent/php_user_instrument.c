@@ -406,6 +406,12 @@ static void reset_wraprec(void* wraprec) {
 }
 #endif
 
+void nr_php_user_instrument_lookup_stats(void) {
+    struct nr_hashmap_stats lookup_stats = nr_hashmap_inspect(user_function_wrappers);
+    nrl_always("# elements: %lu, # buckets used: %lu", lookup_stats.elements, lookup_stats.buckets_used);
+    nrl_always("collisions - min: %lu, max: %lu, avg: %lu", lookup_stats.collisions_min, lookup_stats.collisions_max, lookup_stats. collisions_mean);
+}
+
 /*
  * Reset the user instrumentation records because we're starting a new
  * transaction and so we'll be loading all new user code.
