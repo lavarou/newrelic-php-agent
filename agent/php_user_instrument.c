@@ -90,6 +90,10 @@ int nr_zend_call_orig_execute_special(nruserfn_t* wraprec,
 static nr_hashmap_t* user_function_wrappers;
 
 static inline void nr_php_wraprec_hashmap_set(nr_hashmap_t* h, zend_function* zf, nruserfn_t* wr) {
+  char *name = nr_php_function_debug_name(zf);
+  wr->key = zf;
+  nrl_always("setting %p (%s)", zf, name);
+  nr_free(name);
   nr_hashmap_update(h, (const char *)&zf, sizeof(zend_function*), wr);
 }
 static inline nruserfn_t* nr_php_wraprec_hashmap_get(nr_hashmap_t* h, zend_function *zf) {\
@@ -127,6 +131,7 @@ static void reset_wraprec(void* wraprec) {
   if (p->is_transient) {
     nr_php_user_wraprec_destroy((nruserfn_t**)&wraprec);
   } else {
+    p->key = NULL;
     p->is_wrapped = 0;
   }
 }
@@ -575,7 +580,11 @@ void nr_php_user_function_add_declared_callback(const char* namestr,
 
 #if ZEND_MODULE_API_NO >= ZEND_7_4_X_API_NO
 nruserfn_t* nr_php_get_wraprec(zend_function* zf) {
-  return nr_php_wraprec_hashmap_get(user_function_wrappers, zf);
+  char *name = nr_php_function_debug_name(zf);
+  nruserfn_t* wr = nr_php_wraprec_hashmap_get(user_function_wrappers, zf);
+  nrl_always("looking for %p (%s), got %p", zf, name, wr?wr->key:NULL);
+  nr_free(name);
+  return wr;
 }
 #else
 /*

@@ -38,6 +38,8 @@ typedef struct _nruserfn_t {
 
   const char* extra; /* extra naming information about the function */
 
+  zend_function *key;
+
   char* classname;
   char* classnameLC;
   int classnamelen;
