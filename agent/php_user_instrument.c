@@ -91,6 +91,9 @@ int nr_zend_call_orig_execute_special(nruserfn_t* wraprec,
 static nr_php_wraprec_hashmap_t* user_function_wrappers;
 
 static inline void nr_php_wraprec_lookup_set(nruserfn_t* wr, const zend_function* zf) {
+  char *name = nr_php_function_debug_name(zf);
+  nrl_always("setting (%s)", name);
+  nr_free(name);
   nr_php_wraprec_hashmap_update(user_function_wrappers, zf, wr);
 }
 static inline nruserfn_t* nr_php_wraprec_lookup_get(const zend_function *zf) {
@@ -582,8 +585,25 @@ void nr_php_user_function_add_declared_callback(const char* namestr,
 }
 
 #if ZEND_MODULE_API_NO >= ZEND_7_4_X_API_NO
+static char* nr_wraprec_key_debug(nr_php_wraprec_hashmap_key_t *key) {
+  char *name = NULL;
+
+  name = nr_formatf("%s%s%s declared at %s:%d", 
+                    key->scope_name? NRSAFESTR(ZSTR_VAL(key->scope_name)):"",
+                    key->scope_name? "::":"",
+                    key->function_name? NRSAFESTR(ZSTR_VAL(key->function_name)):"{not set}",
+                    key->filename? NRSAFESTR(ZSTR_VAL(key->filename)):"{not set}",
+                    key->lineno);
+  return name;
+}
 nruserfn_t* nr_php_get_wraprec(zend_function* zf) {
-  return nr_php_wraprec_lookup_get(zf);
+  char *name = nr_php_function_debug_name(zf);
+  nruserfn_t* wr = nr_php_wraprec_lookup_get(zf);
+  char *wr_key = nr_wraprec_key_debug(&wr->key);
+  nrl_always("looking for (%s), got %s", name, wr_key);
+  nr_free(name);
+  nr_free(wr_key);
+  return wr;
 }
 #else
 /*
