@@ -83,7 +83,9 @@ typedef struct _nruserfn_t {
 extern nruserfn_t* nr_wrapped_user_functions; /* a singly linked list */
 
 #if ZEND_MODULE_API_NO >= ZEND_7_4_X_API_NO
+extern void nr_php_init_user_instrumentation(void);
 extern nruserfn_t* nr_php_get_wraprec(zend_function* zf);
+void nr_php_reset_user_instrumentation(void);
 #else
 /*
  * Purpose : Get the wraprec associated with a user function op_array.

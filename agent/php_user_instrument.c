@@ -99,6 +99,43 @@ static inline nruserfn_t* nr_php_wraprec_hashmap_get(nr_hashmap_t* h, zend_funct
 
   return wraprec;
 }
+
+/*
+ * Init user instrumentation. This must only be called on request init!
+ * This creates wraprec lookup hashmap and registers wraprec destructor
+ * callback - reset_wraprec - which is called on request shutdown.
+ */
+static void reset_wraprec(void* wraprec);
+void nr_php_init_user_instrumentation(void) {
+  if (NULL != user_function_wrappers) {
+    /* Should not happen */
+    nrl_verbosedebug(NRL_INSTRUMENT, "user_function_wrappers lookup hashmap already initialized!");
+    return;
+  }
+  user_function_wrappers = nr_hashmap_create_buckets(1024, reset_wraprec);
+}
+
+/*
+ * Reset user instrumentation. This must only be called on request shutdown!
+ * With new request/transaction php is loading all new user code therefore
+ * all non-transient wraprecs need to be reset (mark as not wrapped), and 
+ * all transient wraprecs need to be destroyed.
+ */
+static void nr_php_user_wraprec_destroy(nruserfn_t** wraprec_ptr);
+static void reset_wraprec(void* wraprec) {
+  nruserfn_t*p = wraprec;
+  if (p->is_transient) {
+    nr_php_user_wraprec_destroy((nruserfn_t**)&wraprec);
+  } else {
+    p->is_wrapped = 0;
+  }
+}
+void nr_php_reset_user_instrumentation(void) {
+  // send a metric with the number of transient wrappers
+  if (NULL != user_function_wrappers) {
+    nr_hashmap_destroy(&user_function_wrappers);
+  }
+}
 #endif
 
 /*
@@ -395,36 +432,20 @@ nruserfn_t* nr_php_add_custom_tracer_named(const char* namestr,
   return wraprec; /* return the new wraprec */
 }
 
-#if ZEND_MODULE_API_NO >= ZEND_7_4_X_API_NO
-static void reset_wraprec(void* wraprec) {
-  nruserfn_t*p = wraprec;
-  if (p->is_transient) {
-    nr_php_user_wraprec_destroy((nruserfn_t**)&wraprec);
-  } else {
-    p->is_wrapped = 0;
-  }
-}
-#endif
 
 /*
  * Reset the user instrumentation records because we're starting a new
  * transaction and so we'll be loading all new user code.
  */
+#if ZEND_MODULE_API_NO < ZEND_7_4_X_API_NO
 void nr_php_reset_user_instrumentation(void) {
-#if ZEND_MODULE_API_NO >= ZEND_7_4_X_API_NO
-  if (NULL != user_function_wrappers) {
-    nr_hashmap_destroy(&user_function_wrappers);
-  }
-  // send a metric with the number of transient wrappers
-  user_function_wrappers = nr_hashmap_create_buckets(1024, reset_wraprec);
-#else
   nruserfn_t* p = nr_wrapped_user_functions;
   while (0 != p) {
     p->is_wrapped = 0;
     p = p->next;
   }
-#endif
 }
+#endif
 
 /*
  * Remove any transient wraprecs. This must only be called on request shutdown!
