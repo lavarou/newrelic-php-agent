@@ -310,13 +310,24 @@ axiom-clean:
 #
 # Before running this script, make sure the location of protoc-gen-go is in
 # your $PATH.
-.PHONY: daemon-protobuf
+
+ifeq ($(HAVE_PROTOBUF), 0)
+protobuf-compiler:
+	@echo "'protobuf' installation not found, falling back to building from vendor subdir."
+	make -C vendor local/bin/protoc
+else
+.PHONY: protobuf-complier
+protobuf-compiler: 
+	@echo "Using provided 'protobuf' installation."
+endif
+
+.PHONY:  daemon-protobuf
 daemon-protobuf: src/newrelic/infinite_tracing/com_newrelic_trace_v1/v1.pb.go
 
 src/newrelic/infinite_tracing/com_newrelic_trace_v1/v1.pb.go: protocol/infinite_tracing/v1.proto
-	$(MAKE) vendor # Only build vendor stuff if v1.proto has changed. Otherwise
+	$(MAKE) protobuf-complier # Only build vendor stuff if v1.proto has changed. Otherwise
 	               # this rule will be triggered every time the daemon is built.
-	$(VENDOR_PREFIX)/bin/protoc \
+	$(PROTOBUF_PREFIX)/bin/protoc \
 	    -I=./protocol/infinite_tracing \
 	    --go_out="paths=source_relative,plugins=grpc:src/newrelic/infinite_tracing/com_newrelic_trace_v1" \
 	    protocol/infinite_tracing/v1.proto

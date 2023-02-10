@@ -65,6 +65,22 @@ else
   endif
 endif
 
+# Whether you have protobuf compiler (not required by build, only required
+# when compiling 8T protobufs for daemon). By default, ask pkg-config
+# for install location. This can be overriden by environment.
+# Agent's build system assumes that protobuf's bindir is %prefix%/bin.
+PROTOBUF_PREFIX ?= $(shell pkg-config protobuf --variable=prefix 2>/dev/null)
+HAVE_PROTOBUF := $(shell \
+                    test -d "$(PROTOBUF_PREFIX)" \
+                    && test -d "$(PROTOBUF_PREFIX)/bin" \
+                    && test -x "$(PROTOBUF_PREFIX)/bin/protoc" \
+                    && echo 1 \
+                    || echo 0)
+ifneq ($(findstring environment,$(origin PROTOBUF_PREFIX)), )
+  ifeq ($(HAVE_PROTOBUF), 0)
+    $(warning User provided 'protobuf' installation is not valid!)
+  endif
+endif
 
 # Our one external dependency is libpcre.a, which axiom needs. By default, ask
 # pkg-config for install location. This can be overriden by environment.

@@ -17,6 +17,10 @@ ifeq (0,$(HAVE_PROTOBUF_C))
 PROTOBUF_C_PREFIX := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../vendor)/local
 endif
 
+ifeq (0,$(HAVE_PROTOBUF))
+PROTOBUF_PREFIX := $(realpath $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../vendor)/local
+endif
+
 #
 # protobuf-c
 #
