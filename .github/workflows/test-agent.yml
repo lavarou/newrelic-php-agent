@@ -169,7 +169,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}}
-          path: php-agent/bin/integration_runner
+          path: php-agent/agent/modules/newrelic.so
   integration-tests:
     needs: [daemon-unit-tests, agent-unit-test]
     runs-on: ubuntu-latest
