@@ -206,15 +206,26 @@ jobs:
           - php: '7.4'
           - php: '8.0'
     steps:
+      - name: Checkout integration tests
+        uses: actions/checkout@v3
+        with:
+          path: php-agent
       - name: Get integration_runner
         if: ${{ matrix.arch == 'amd64' }}
         uses: actions/download-artifact@v3
         with:
           name: integration_runner-${{matrix.platform}}-${{matrix.arch}}
-          path: integration_runner
+          path: php-agent/bin/integration_runner
       - name: Get newrelic.so
         if: ${{ matrix.arch == 'amd64' }}
         uses: actions/download-artifact@v3
         with:
           name: newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}}
-          path: newrelic.so
+          path: php-agent/agent/modules/newrelic.so
+      - name: Run integration tests
+        if: ${{ matrix.arch == 'amd64' }}
+        run: >
+          docker run --rm --platform linux/${{matrix.arch}}
+          -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent"
+          --entrypoint /bin/bash
+          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION -c "/usr/local/src/newrelic-php-agent/bin/integration_runner --help"
