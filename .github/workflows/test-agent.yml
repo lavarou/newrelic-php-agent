@@ -49,7 +49,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build daemon
-        if: ${{ matrix.arch == 'amd64' }}
+        # if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
@@ -130,13 +130,13 @@ jobs:
             echo "AGENT_CHECK_VARIANT=valgrind" >> $GITHUB_OUTPUT
           fi
       - name: Build axiom
-        if: ${{ matrix.arch == 'amd64' }}
+        # if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
           $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION axiom 
       - name: Build agent
-        if: ${{ matrix.arch == 'amd64' }}
+        # if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
@@ -211,19 +211,19 @@ jobs:
         with:
           path: php-agent
       - name: Get integration_runner
-        if: ${{ matrix.arch == 'amd64' }}
+        # if: ${{ matrix.arch == 'amd64' }}
         uses: actions/download-artifact@v3
         with:
           name: integration_runner-${{matrix.platform}}-${{matrix.arch}}
           path: php-agent/bin
       - name: Get newrelic.so
-        if: ${{ matrix.arch == 'amd64' }}
+        # if: ${{ matrix.arch == 'amd64' }}
         uses: actions/download-artifact@v3
         with:
           name: newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}}
           path: php-agent/agent/modules
       - name: Prep artifacts for use
-        if: ${{ matrix.arch == 'amd64' }}
+        # if: ${{ matrix.arch == 'amd64' }}
         run: |
           ls -l php-agent/bin/
           chmod 755 php-agent/bin/integration_runner
@@ -232,7 +232,7 @@ jobs:
           chmod 755 php-agent/agent/modules/newrelic.so
           ls -l php-agent/agent/modules
       - name: Enable arm64 emulation
-        if: ${{ matrix.arch == 'arm64' }}
+        # if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v2
         with:
           image: tonistiigi/binfmt:${{vars.BINFMT_IMAGE_VERSION}}
@@ -243,7 +243,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Run integration tests
-        if: ${{ matrix.arch == 'amd64' }}
+        # if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent"
