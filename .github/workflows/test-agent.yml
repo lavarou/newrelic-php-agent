@@ -249,4 +249,4 @@ jobs:
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent"
           --entrypoint /bin/bash
           $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION -c 
-          "/usr/local/src/newrelic-php-agent/bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/basic/test_internal_function.php"
+          "/usr/local/src/newrelic-php-agent/bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/logging"
