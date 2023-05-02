@@ -210,7 +210,7 @@ jobs:
         if: ${{ matrix.arch == 'amd64' }}
         uses: actions/download-artifact@v3
         with:
-          name: newrelic.so-${{matrix.platform}}-${{matrix.arch}}
+          name: integration_runner-${{matrix.platform}}-${{matrix.arch}}
           path: integration_runner
       - name: Get newrelic.so
         if: ${{ matrix.arch == 'amd64' }}
