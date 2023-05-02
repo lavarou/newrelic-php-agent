@@ -226,11 +226,9 @@ jobs:
         if: ${{ matrix.arch == 'amd64' }}
         run: |
           ls -l php-agent/bin/
-          # mv php-agent/bin/integration_runner-${{matrix.platform}}-${{matrix.arch}} php-agent/bin/integration_runner
           chmod 755 php-agent/bin/integration_runner
           ls -l php-agent/bin/
           ls -l php-agent/agent/modules
-          # mv php-agent/agent/modules/newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}} php-agent/agent/modules/newrelic.so
           chmod 755 php-agent/agent/modules/newrelic.so
           ls -l php-agent/agent/modules
       - name: Enable arm64 emulation
@@ -250,4 +248,4 @@ jobs:
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent"
           --entrypoint /bin/bash
-          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION -c "/usr/local/src/newrelic-php-agent/bin/integration_runner-${{matrix.platform}}-${{matrix.arch}} --help"
+          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION -c "/usr/local/src/newrelic-php-agent/bin/integration_runner --help"
