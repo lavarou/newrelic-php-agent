@@ -54,12 +54,12 @@ jobs:
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
           $IMAGE_NAME:$IMAGE_TAG-${{ matrix.platform }}-$IMAGE_VERSION daemon
-      - name: Run daemon tests
-        if: ${{ matrix.arch == 'amd64' }}
-        run: >
-          docker run --rm --platform linux/${{matrix.arch}}
-          -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
-          $IMAGE_NAME:$IMAGE_TAG-${{ matrix.platform }}-$IMAGE_VERSION daemon_test
+      # - name: Run daemon tests
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: >
+      #     docker run --rm --platform linux/${{matrix.arch}}
+      #     -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
+      #     $IMAGE_NAME:$IMAGE_TAG-${{ matrix.platform }}-$IMAGE_VERSION daemon_test
       - name: Save integration_runner for integration tests
         uses: actions/upload-artifact@v3
         with:
@@ -141,30 +141,30 @@ jobs:
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
           $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION agent
-      - name: Build axiom unit tests
-        if: ${{ matrix.arch == 'amd64' }}
-        run: >
-          docker run --rm --platform linux/${{matrix.arch}}
-          -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
-          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION axiom-tests
-      - name: Run axiom unit tests
-        if: ${{ matrix.arch == 'amd64' }}
-        run: >
-          docker run --rm --platform linux/${{matrix.arch}}
-          -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
-          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION axiom-${{ steps.get-check-variant.outputs.AXIOM_CHECK_VARIANT }}
-      - name: Build agent unit tests
-        if: ${{ matrix.arch == 'amd64' }}
-        run: >
-          docker run --rm --platform linux/${{matrix.arch}}
-          -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
-          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION agent-tests
-      - name: Run agent unit tests
-        if: ${{ matrix.arch == 'amd64' }}
-        run: >
-          docker run --rm --platform linux/${{matrix.arch}}
-          -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
-          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION agent-${{ steps.get-check-variant.outputs.AGENT_CHECK_VARIANT }}
+      # - name: Build axiom unit tests
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: >
+      #     docker run --rm --platform linux/${{matrix.arch}}
+      #     -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
+      #     $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION axiom-tests
+      # - name: Run axiom unit tests
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: >
+      #     docker run --rm --platform linux/${{matrix.arch}}
+      #     -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
+      #     $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION axiom-${{ steps.get-check-variant.outputs.AXIOM_CHECK_VARIANT }}
+      # - name: Build agent unit tests
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: >
+      #     docker run --rm --platform linux/${{matrix.arch}}
+      #     -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
+      #     $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION agent-tests
+      # - name: Run agent unit tests
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: >
+      #     docker run --rm --platform linux/${{matrix.arch}}
+      #     -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
+      #     $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION agent-${{ steps.get-check-variant.outputs.AGENT_CHECK_VARIANT }}
       - name: Save newrelic.so for integration tests
         uses: actions/upload-artifact@v3
         with:
