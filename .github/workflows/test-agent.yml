@@ -223,6 +223,7 @@ jobs:
           name: newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}}
           path: php-agent/agent/modules
       - name: Prep artifacts for use
+        if: ${{ matrix.arch == 'amd64' }}
         run: |
           ls -l php-agent/bin/
           # mv php-agent/bin/integration_runner-${{matrix.platform}}-${{matrix.arch}} php-agent/bin/integration_runner
