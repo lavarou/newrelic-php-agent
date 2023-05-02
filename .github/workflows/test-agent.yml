@@ -222,6 +222,16 @@ jobs:
         with:
           name: newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}}
           path: php-agent/agent/modules
+      - name: Prep artifacts for use
+        run: |
+          ls -l php-agent/bin/
+          mv php-agent/bin/integration_runner-${{matrix.platform}}-${{matrix.arch}} php-agent/bin/integration_runner
+          chmod 755 php-agent/bin/integration_runner
+          ls -l php-agent/bin/
+          ls -l php-agent/agent/modules
+          mv php-agent/agent/modules/newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}} php-agent/agent/modules/newrelic.so
+          chmod 755 php-agent/agent/modules/newrelic.so
+          ls -l php-agent/agent/modules
       - name: Enable arm64 emulation
         if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v2
