@@ -215,13 +215,13 @@ jobs:
         uses: actions/download-artifact@v3
         with:
           name: integration_runner-${{matrix.platform}}-${{matrix.arch}}
-          path: php-agent/bin/integration_runner
+          path: php-agent/bin
       - name: Get newrelic.so
         if: ${{ matrix.arch == 'amd64' }}
         uses: actions/download-artifact@v3
         with:
           name: newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}}
-          path: php-agent/agent/modules/newrelic.so
+          path: php-agent/agent/modules
       - name: Enable arm64 emulation
         if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v2
@@ -239,4 +239,4 @@ jobs:
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent"
           --entrypoint /bin/bash
-          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION -c "/usr/local/src/newrelic-php-agent/bin/integration_runner --help"
+          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION -c "/usr/local/src/newrelic-php-agent/bin/integration_runner-${{matrix.platform}}-${{matrix.arch}} --help"
