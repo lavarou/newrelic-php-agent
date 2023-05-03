@@ -612,11 +612,23 @@ func discoverTests(pattern string, searchPaths []string) []string {
 
 func injectIntoConnectReply(reply collector.RPMResponse, newRunID, crossProcessId string) []byte {
 	var x map[string]interface{}
+	var acctId int
 
 	json.Unmarshal(reply.Body, &x)
 
 	x["agent_run_id"] = newRunID
 	x["cross_process_id"] = crossProcessId
+	accts, ok := x["trusted_account_ids"].([](interface{}))
+	if !ok {
+			fmt.Println("wrong type");
+	}
+	_, err := fmt.Sscanf(secrets.NewrelicAccountId, "%d", &acctId)
+	if err != nil {
+			fmt.Println("wrong type");
+	} else {
+			accts = append(accts, acctId)
+	}
+	x["trusted_account_ids"] = accts
 
 	out, _ := json.Marshal(x)
 	return out
