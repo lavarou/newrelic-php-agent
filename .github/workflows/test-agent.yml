@@ -248,50 +248,86 @@ jobs:
         run: |
           docker create --name php-${{matrix.php}}-${{matrix.platform}} -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" --entrypoint tail $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION "-f" "/dev/null"
           docker start php-${{matrix.php}}-${{matrix.platform}}
-      - name: Run integration tests - api
+      # - name: Run integration tests - api
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/api"
+      # - name: Run integration tests - attributes
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/attributes"
+      # - name: Run integration tests - basic
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/basic"
+      # - name: Run integration tests - distributed_tracing
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/distributed_tracing"
+      # - name: Run integration tests - errors
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/errors"
+      # - name: Run integration tests - events
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/events"
+      # - name: Run integration tests - external
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/external"
+      # - name: Run integration tests - frameworks
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/frameworks"
+      # - name: Run integration tests - ini
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/ini"
+      # - name: Run integration tests - lang
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/lang"
+      # - name: Run integration tests - logging
+      #   if: ${{ matrix.arch == 'amd64' }}
+      #   run: |
+      #     docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/logging"
+      - name: Run integration tests - memcache
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/api"
-      - name: Run integration tests - attributes
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/memcache"
+      - name: Run integration tests - memcached
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/attributes"
-      - name: Run integration tests - basic
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/memcached"
+      - name: Run integration tests - mongo
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/basic"
-      - name: Run integration tests - distributed_tracing
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/mongo"
+      - name: Run integration tests - mysql
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/distributed_tracing"
-      - name: Run integration tests - errors
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/mysql"
+      - name: Run integration tests - mysqli
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/errors"
-      - name: Run integration tests - events
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/mysqli"
+      - name: Run integration tests - output
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/events"
-      - name: Run integration tests - external
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/output"
+      - name: Run integration tests - pdo
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/external"
-      - name: Run integration tests - frameworks
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/pdo"
+      - name: Run integration tests - pgsql
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/frameworks"
-      - name: Run integration tests - ini
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/pgsql"
+      - name: Run integration tests - predis
         if: ${{ matrix.arch == 'amd64' }}
         run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/ini"
-      - name: Run integration tests - lang
-        if: ${{ matrix.arch == 'amd64' }}
-        run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/lang"
-      - name: Run integration tests - logging
-        if: ${{ matrix.arch == 'amd64' }}
-        run: |
-          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/logging"
+          docker exec php-${{matrix.php}}-${{matrix.platform}} sh -c "./bin/integration_runner -agent agent/modules/newrelic.so -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} tests/integration/predis"
       - name: Stop services
         if: always()
         run: docker rm --force php-${{matrix.php}}-${{matrix.platform}}
