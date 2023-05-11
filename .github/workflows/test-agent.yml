@@ -265,7 +265,7 @@ jobs:
         env:
           PHP: ${{matrix.php}}
           LIBC: ${{matrix.platform}}
-          AGENT_CODE: ${GITHUB_WORKSPACE}/php-agent
+          AGENT_CODE: $GITHUB_WORKSPACE/php-agent
         working-directory: ./php-agent
         run: |
           make test-services-stop
