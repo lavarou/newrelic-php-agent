@@ -346,56 +346,49 @@ integration: Makefile daemon lasp-test-all integration-events-limits
 # limit value.
 #
 
-.PHONY: integration-events-limits
-integration-events-limits: daemon
-	# create array with the collector response for each agent requested custom events max samples
-	# currently based on fast harvest cycle being 5 seconds so ratio is 12:1
-	declare -A custom_limits_tests; \
-	custom_limits_tests[240]=20; \
-	custom_limits_tests[7000]=583; \
-	custom_limits_tests[30000]=2500; \
-	custom_limits_tests[100000]=8333; \
-	for PHP in $(PHP_VERSION_LIST); do \
-          echo; echo "# PHP=$${PHP}"; \
-	      for custom_max in "$${!custom_limits_tests[@]}"; do \
-	          collector_limit=$${custom_limits_tests[$$custom_max]}; \
-			  php_test_file="tests/event_limits/custom/test_custom_events_max_samples_stored_$${custom_max}_limit.php"; \
-	          env NRLAMP_PHP=$${PHP} bin/integration_runner $(INTEGRATION_ARGS) \
-	            -max_custom_events $${custom_max} $${php_test_file} || exit 1; \
-	      done; \
-	      echo "# PHP=$${PHP}"; \
+.PHONY: test-events-limits
+test-events-limits: custom-limits-tests invalid-limits-tests default-limits-tests
+
+.PHONY: custom-limits-tests
+custom-limits-tests:
+	@# create array with the collector response for each agent requested custom events max samples
+	@# currently based on fast harvest cycle being 5 seconds so ratio is 12:1
+	@declare -A custom_limits_tests; \
+		custom_limits_tests[240]=20; \
+		custom_limits_tests[7000]=583; \
+		custom_limits_tests[30000]=2500; \
+		custom_limits_tests[100000]=8333; \
+	for custom_max in "$${!custom_limits_tests[@]}"; do \
+		collector_limit=$${custom_limits_tests[$$custom_max]}; \
+		php_test_file="tests/event_limits/custom/test_custom_events_max_samples_stored_$${custom_max}_limit.php"; \
+		bin/integration_runner $(INTEGRATION_ARGS) \
+			-max_custom_events $${custom_max} 
+			$${php_test_file} || exit 1; \
 	done;
 
-	# test for invalid value (-1) and (1000000)
-	# Should use default (30000) for -1 and max (100000) for 1000000
-	for PHP in $(PHP_VERSION_LIST); do \
-	    env NRLAMP_PHP=$${PHP} bin/integration_runner $(INTEGRATION_ARGS) \
-	        -max_custom_events 100000 \
-	        tests/event_limits/custom/test_custom_events_max_samples_stored_invalid_toolarge_limit.php || exit 1; \
-	    env NRLAMP_PHP=$${PHP} bin/integration_runner $(INTEGRATION_ARGS) \
-	        -max_custom_events 30000 \
-	        tests/event_limits/custom/test_custom_events_max_samples_stored_invalid_toosmall_limit.php || exit 1; \
-	    echo "# PHP=$${PHP}"; \
-	done;	
+.PHONY: invalid-limits-tests
+invalid-limits-tests:
+	@# test for invalid value (-1) and (1000000)
+	@# Should use default (30000) for -1 and max (100000) for 1000000
+	@bin/integration_runner $(INTEGRATION_ARGS) \
+		-max_custom_events 100000 \
+		tests/event_limits/custom/test_custom_events_max_samples_stored_invalid_toolarge_limit.php || exit 1;
+	@bin/integration_runner $(INTEGRATION_ARGS) \
+		-max_custom_events 30000 \
+		tests/event_limits/custom/test_custom_events_max_samples_stored_invalid_toosmall_limit.php || exit 1;
 
-	# also run a test where limit is set to 0
-	# default value is used
-	for PHP in $(PHP_VERSION_LIST); do \
-	    env NRLAMP_PHP=$${PHP} bin/integration_runner $(INTEGRATION_ARGS) \
-	        -max_custom_events 0 \
-	        tests/event_limits/custom/test_custom_events_max_samples_stored_0_limit.php || exit 1; \
-	    echo "# PHP=$${PHP}"; \
-	done;
-
-	# also run a test where no agent custom event limit is specified and verify
-	# default value is used
-	for PHP in $(PHP_VERSION_LIST); do \
-	    env NRLAMP_PHP=$${PHP} bin/integration_runner $(INTEGRATION_ARGS) \
-	        -max_custom_events 30000 \
-	        tests/event_limits/custom/test_custom_events_max_samples_stored_not_specified.php || exit 1; \
-	    echo "# PHP=$${PHP}"; \
-	done;
-
+.PHONY: default-limits-tests
+default-limits-tests:
+	@# also run a test where limit is set to 0
+	@# default value is used
+	@bin/integration_runner $(INTEGRATION_ARGS) \
+		-max_custom_events 0 \
+		tests/event_limits/custom/test_custom_events_max_samples_stored_0_limit.php || exit 1;
+	@# also run a test where no agent custom event limit is specified and verify
+	@# default value is used
+	@bin/integration_runner $(INTEGRATION_ARGS) \
+		-max_custom_events 30000 \
+		tests/event_limits/custom/test_custom_events_max_samples_stored_not_specified.php || exit 1;
 #
 # Code profiling
 #
@@ -497,6 +490,12 @@ endif
 #
 
 include make/release.mk
+
+test-services-start:
+	docker compose up --build --remove-orphans -d
+
+test-services-stop:
+	docker compose stop
 
 #
 # Docker Development Environment
