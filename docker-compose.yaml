@@ -16,12 +16,10 @@ services:
       MYSQL_PASSWORD: admin
       MYSQL_HOST: mysqldb
     ports:
-      - "33061:3306"
+      - "3306:3306"
     container_name: mysqldb
   redisdb:
-    build:
-      context: .
-      dockerfile: files/Dockerfile.redis
+    image: redis
     restart: always
     ports:
       - "6379:6379"
@@ -46,11 +44,9 @@ services:
     ports:
       - "5432:5432"
     container_name: postgres
-  agent:
-    build:
-      context: .
-      dockerfile: files/Dockerfile
-    user: ${UID}:${GID}
+  php:
+    image: newrelic/nr-php-agent-builder:make-php-${PHP}-${LIBC}-v1
+
     environment:
       MEMCACHE_HOST: memcached
 
@@ -69,12 +65,12 @@ services:
       PREDIS_HOME: /usr/src/vendor/predis/predis/
       REDIS_HOST: redisdb
 
-      PS1: "New Relic > "
-      NEWRELIC_COLLECTOR_HOST : ${NEW_RELIC_COLLECTOR_HOST:-collector.newrelic.com}
-      NEWRELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY}
+#       # PS1: "New Relic > "
+#       NEWRELIC_COLLECTOR_HOST : ${NEW_RELIC_COLLECTOR_HOST:-collector.newrelic.com}
+#       NEWRELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY}
     volumes:
-       - ${PWD}:/usr/src/myapp
-    working_dir: /usr/src/myapp
-    stdin_open: true
-    tty: true
-    container_name: agent
+       - ${AGENT_CODE}:/usr/local/src/newrelic-php-agent
+    # working_dir: /usr/src/myapp
+    entrypoint: tail
+    command: -f /dev/null
+    container_name: php
