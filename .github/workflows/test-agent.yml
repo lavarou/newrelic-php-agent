@@ -250,12 +250,14 @@ jobs:
           PHP: ${{matrix.php}}
           LIBC: ${{matrix.platform}}
           AGENT_CODE: ${GITHUB_WORKSPACE}/php-agent
+        working-directory: ./php-agent
         run: |
           make test-services-start
       - name: Test events limits
         if: ${{ matrix.arch == 'amd64' }}
         env:
           INTEGRATION_ARGS: -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so
+        working-directory: ./php-agent
         run: |
           docker exec php make test-events-limits
       - name: Stop services
@@ -264,5 +266,6 @@ jobs:
           PHP: ${{matrix.php}}
           LIBC: ${{matrix.platform}}
           AGENT_CODE: ${GITHUB_WORKSPACE}/php-agent
+        working-directory: ./php-agent
         run: |
           make test-services-stop
