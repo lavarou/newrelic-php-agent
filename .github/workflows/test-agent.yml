@@ -259,7 +259,7 @@ jobs:
           INTEGRATION_ARGS: -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so
         working-directory: ./php-agent
         run: |
-          docker exec php make test-events-limits
+          docker exec php make default-limits-tests
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
