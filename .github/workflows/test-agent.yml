@@ -260,7 +260,7 @@ jobs:
           NR_COLLECTOR_HOST: ${{secrets.NR_COLLECTOR_HOST}}
         working-directory: ./php-agent
         run: |
-          docker exec php make invalid-limits-tests INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
+          docker exec php make custom-limits-tests INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
