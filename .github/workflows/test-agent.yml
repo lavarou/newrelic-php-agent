@@ -267,17 +267,18 @@ jobs:
         env:
           NR_TEST_LICENSE: ${{secrets.NR_TEST_LICENSE}}
           NR_COLLECTOR_HOST: ${{secrets.NR_COLLECTOR_HOST}}
-          LICENSE_lasp_suite_most_secure: ${{secrets.LICENSE_LASP_SUITE_MOST_SECURE}}
-          LICENSE_lasp_suite_least_secure: ${{secrets.LICENSE_LASP_SUITE_LEAST_SECURE}}
-          LICENSE_lasp_suite_random_1: ${{secrets.LICENSE_LASP_SUITE_RANDOM_1}}
-          LICENSE_lasp_suite_random_2: ${{secrets.LICENSE_LASP_SUITE_RANDOM_2}}
-          LICENSE_lasp_suite_random_3: ${{secrets.LICENSE_LASP_SUITE_RANDOM_3}}
         working-directory: ./php-agent
         shell: bash
         run: |
-          docker exec php make lasp-test SUITE_LASP=suite-most-secure \
-          INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so" \
-          PHPS=${{matrix.php}} LICENSE_lasp_suite_most_secure="$LICENSE_lasp_suite_most_secure"
+          docker exec \
+          -e PHPS=${{matrix.php}} \
+          -e LICENSE_lasp_suite_most_secure=${{secrets.LICENSE_LASP_SUITE_MOST_SECURE}} \
+          -e LICENSE_lasp_suite_least_secure=${{secrets.LICENSE_LASP_SUITE_LEAST_SECURE}} \
+          -e LICENSE_lasp_suite_random_1=${{secrets.LICENSE_LASP_SUITE_RANDOM_1}} \
+          -e LICENSE_lasp_suite_random_2=${{secrets.LICENSE_LASP_SUITE_RANDOM_2}} \
+          -e LICENSE_lasp_suite_random_3=${{secrets.LICENSE_LASP_SUITE_RANDOM_3}} \
+          -e INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so" \
+          php make lasp-test SUITE_LASP=suite-most-secure
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
