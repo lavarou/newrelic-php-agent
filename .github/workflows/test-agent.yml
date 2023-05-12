@@ -262,6 +262,21 @@ jobs:
         shell: bash
         run: |
           docker exec php make custom-limits-tests INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
+      - name: Test LASP
+        if: ${{ matrix.arch == 'amd64' }}
+        env:
+          PHPS: ${{matrix.php}}
+          NR_TEST_LICENSE: ${{secrets.NR_TEST_LICENSE}}
+          NR_COLLECTOR_HOST: ${{secrets.NR_COLLECTOR_HOST}}
+          LICENSE_lasp_suite_most_secure: ${{secrets.LICENSE_LASP_SUITE_MOST_SECURE}}
+          LICENSE_lasp_suite_least_secure: ${{secrets.LICENSE_LASP_SUITE_LEAST_SECURE}}
+          LICENSE_lasp_suite_random_1: ${{secrets.LICENSE_LASP_SUITE_RANDOM_1}}
+          LICENSE_lasp_suite_random_2: ${{secrets.LICENSE_LASP_SUITE_RANDOM_2}}
+          LICENSE_lasp_suite_random_3: ${{secrets.LICENSE_LASP_SUITE_RANDOM_3}}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec php make lasp-test-all INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
