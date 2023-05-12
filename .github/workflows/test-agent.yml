@@ -265,7 +265,6 @@ jobs:
       - name: Test LASP
         if: ${{ matrix.arch == 'amd64' }}
         env:
-          PHPS: ${{matrix.php}}
           NR_TEST_LICENSE: ${{secrets.NR_TEST_LICENSE}}
           NR_COLLECTOR_HOST: ${{secrets.NR_COLLECTOR_HOST}}
           LICENSE_lasp_suite_most_secure: ${{secrets.LICENSE_LASP_SUITE_MOST_SECURE}}
@@ -276,7 +275,7 @@ jobs:
         working-directory: ./php-agent
         shell: bash
         run: |
-          docker exec php make lasp-test-all INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
+          docker exec php PHPS=${{matrix.php}} LICENSE_lasp_suite_most_secure="$LICENSE_lasp_suite_most_secure" make lasp-test SUITE_LASP=suite-most-secure INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
