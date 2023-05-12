@@ -276,7 +276,7 @@ jobs:
         shell: bash
         run: |
           docker exec php make lasp-test SUITE_LASP=suite-most-secure \
-          INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
+          INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so" \
           PHPS=${{matrix.php}} LICENSE_lasp_suite_most_secure="$LICENSE_lasp_suite_most_secure"
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
