@@ -252,7 +252,7 @@ jobs:
           AGENT_CODE: ${{github.workspace}}/php-agent
         working-directory: ./php-agent
         run: |
-          make test-services-start SERVICES=php
+          make test-services-start SERVICES="php mysqldb"
       - name: Test events limits
         if: ${{ matrix.arch == 'amd64' }}
         env:
@@ -275,7 +275,7 @@ jobs:
           -e LICENSE_lasp_suite_random_2=${{secrets.LICENSE_LASP_SUITE_RANDOM_2}} \
           -e LICENSE_lasp_suite_random_3=${{secrets.LICENSE_LASP_SUITE_RANDOM_3}} \
           -e INTEGRATION_ARGS="-license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so" \
-          php make lasp-test SUITE_LASP=suite-least-secure
+          php make lasp-test SUITE_LASP=suite-random-1
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
