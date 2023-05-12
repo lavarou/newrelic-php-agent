@@ -256,10 +256,11 @@ jobs:
       - name: Test events limits
         if: ${{ matrix.arch == 'amd64' }}
         env:
-          INTEGRATION_ARGS: -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so
+          NR_TEST_LICENSE: ${{secrets.NR_TEST_LICENSE}}
+          NR_COLLECTOR_HOST: ${{secrets.NR_COLLECTOR_HOST}}
         working-directory: ./php-agent
         run: |
-          docker exec php make default-limits-tests
+          docker exec php make default-limits-tests INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
