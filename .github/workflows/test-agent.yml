@@ -252,13 +252,14 @@ jobs:
           AGENT_CODE: ${{github.workspace}}/php-agent
         working-directory: ./php-agent
         run: |
-          make test-services-start
+          make test-services-start SERVICES=php
       - name: Test events limits
         if: ${{ matrix.arch == 'amd64' }}
         env:
           NR_TEST_LICENSE: ${{secrets.NR_TEST_LICENSE}}
           NR_COLLECTOR_HOST: ${{secrets.NR_COLLECTOR_HOST}}
         working-directory: ./php-agent
+        shell: bash
         run: |
           docker exec php make custom-limits-tests INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
       - name: Stop services
