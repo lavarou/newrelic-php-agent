@@ -362,7 +362,7 @@ custom-limits-tests:
 		collector_limit=$${custom_limits_tests[$$custom_max]}; \
 		php_test_file="tests/event_limits/custom/test_custom_events_max_samples_stored_$${custom_max}_limit.php"; \
 		bin/integration_runner $(INTEGRATION_ARGS) \
-			-max_custom_events $${custom_max} 
+			-max_custom_events $${custom_max} \
 			$${php_test_file} || exit 1; \
 	done;
 
