@@ -253,6 +253,12 @@ jobs:
         working-directory: ./php-agent
         run: |
           make test-services-start SERVICES="php mysqldb"
+      - name: Test slow sql
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec php bin/integration_runner -license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so tests/integration/pdo/test_slow_sql_1.php81.php
       - name: Test events limits
         if: ${{ matrix.arch == 'amd64' }}
         env:
