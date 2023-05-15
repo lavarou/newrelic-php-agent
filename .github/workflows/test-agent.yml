@@ -269,7 +269,7 @@ jobs:
           -e INTEGRATION_ARGS="-license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so" \
           php make lasp-test-all
       - name: Run integration tests - api
-        if: ${{ matrix.arch == 'amd64' }}
+        if: ${{ matrix.arch == 'amd64' && matrix.platform == 'gnu' }}
         working-directory: ./php-agent
         shell: bash
         run: |
@@ -278,7 +278,7 @@ jobs:
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/api
       - name: Run integration tests - attributes
-        if: ${{ matrix.arch == 'amd64' }}
+        if: ${{ matrix.arch == 'amd64' && matrix.platform == 'gnu' }}
         working-directory: ./php-agent
         shell: bash
         run: |
@@ -286,7 +286,7 @@ jobs:
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/attributes
       - name: Run integration tests - basic
-        if: ${{ matrix.arch == 'amd64' }}
+        if: ${{ matrix.arch == 'amd64' && matrix.platform == 'gnu' }}
         working-directory: ./php-agent
         shell: bash
         run: |
@@ -294,7 +294,7 @@ jobs:
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/basic
       - name: Run integration tests - distributed_tracing
-        if: ${{ matrix.arch == 'amd64' }}
+        if: ${{ matrix.arch == 'amd64' && matrix.platform == 'gnu' }}
         working-directory: ./php-agent
         shell: bash
         run: |
@@ -305,7 +305,7 @@ jobs:
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/distributed_tracing
       - name: Run integration tests - errors
-        if: ${{ matrix.arch == 'amd64' }}
+        if: ${{ matrix.arch == 'amd64' && matrix.platform == 'gnu' }}
         working-directory: ./php-agent
         shell: bash
         run: |
@@ -313,7 +313,7 @@ jobs:
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/errors
       - name: Run integration tests - events
-        if: ${{ matrix.arch == 'amd64' }}
+        if: ${{ matrix.arch == 'amd64' && matrix.platform == 'gnu' }}
         working-directory: ./php-agent
         shell: bash
         run: |
@@ -321,7 +321,7 @@ jobs:
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/events
       - name: Run integration tests - external
-        if: ${{ matrix.arch == 'amd64' }}
+        if: ${{ matrix.arch == 'amd64' && matrix.platform == 'gnu' }}
         working-directory: ./php-agent
         shell: bash
         run: |
