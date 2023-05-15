@@ -256,6 +256,15 @@ jobs:
         working-directory: ./php-agent
         run: |
           make test-services-start SERVICES="php mysqldb"
+      - name: Debug php service
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec php sh -c "php -m"
+          docker exec php sh -c "php -r 'var_dump(json_encode(array(0,1)));'"
+          docker exec php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/api/metadata/test_trace_metadata_dt.php
       - name: Test slow sql
         if: ${{ matrix.arch == 'amd64' }}
         working-directory: ./php-agent
