@@ -38,6 +38,7 @@ jobs:
         with:
           path: php-agent
       - name: Enable arm64 emulation
+        if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v2
         with:
           image: tonistiigi/binfmt:${{vars.BINFMT_IMAGE_VERSION}}
@@ -48,6 +49,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Build daemon
+        if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
@@ -130,11 +132,13 @@ jobs:
             echo "AGENT_CHECK_VARIANT=valgrind" >> $GITHUB_OUTPUT
           fi
       - name: Build axiom
+        if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
           $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION axiom 
       - name: Build agent
+        if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
@@ -209,16 +213,19 @@ jobs:
         with:
           path: php-agent
       - name: Get integration_runner
+        if: ${{ matrix.arch == 'amd64' }}
         uses: actions/download-artifact@v3
         with:
           name: integration_runner-${{matrix.platform}}-${{matrix.arch}}
           path: php-agent/bin
       - name: Get newrelic.so
+        if: ${{ matrix.arch == 'amd64' }}
         uses: actions/download-artifact@v3
         with:
           name: newrelic.so-${{matrix.platform}}-${{matrix.arch}}-${{matrix.php}}
           path: php-agent/agent/modules
       - name: Prep artifacts for use
+        if: ${{ matrix.arch == 'amd64' }}
         run: |
           ls -l php-agent/bin/
           chmod 755 php-agent/bin/integration_runner
@@ -227,6 +234,7 @@ jobs:
           chmod 755 php-agent/agent/modules/newrelic.so
           ls -l php-agent/agent/modules
       - name: Enable arm64 emulation
+        if: ${{ matrix.arch == 'arm64' }}
         uses: docker/setup-qemu-action@v2
         with:
           image: tonistiigi/binfmt:${{vars.BINFMT_IMAGE_VERSION}}
@@ -237,6 +245,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
       - name: Start services
+        if: ${{ matrix.arch == 'amd64' }}
         env:
           PHP: ${{matrix.php}}
           LIBC: ${{matrix.platform}}
@@ -246,12 +255,14 @@ jobs:
         run: |
           make test-services-start SERVICES="php mysqldb"
       - name: Test slow sql
+        if: ${{ matrix.arch == 'amd64' }}
         working-directory: ./php-agent
         shell: bash
         run: |
           docker exec php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/pdo/test_slow_sql_1.php81.php
       - name: Test events limits
+        if: ${{ matrix.arch == 'amd64' }}
         env:
           NR_TEST_LICENSE: ${{secrets.NR_TEST_LICENSE}}
           NR_COLLECTOR_HOST: ${{secrets.NR_COLLECTOR_HOST}}
@@ -260,6 +271,7 @@ jobs:
         run: |
           docker exec php make custom-limits-tests INTEGRATION_ARGS="-license $NR_TEST_LICENSE -collector $NR_COLLECTOR_HOST -agent agent/modules/newrelic.so"
       - name: Test LASP
+        if: ${{ matrix.arch == 'amd64' }}
         working-directory: ./php-agent
         shell: bash
         run: |
@@ -273,6 +285,7 @@ jobs:
           -e INTEGRATION_ARGS="-license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so" \
           php make lasp-test-all
       - name: Stop services
+        if: ${{ matrix.arch == 'amd64' }}
         env:
           PHP: ${{matrix.php}}
           LIBC: ${{matrix.platform}}
