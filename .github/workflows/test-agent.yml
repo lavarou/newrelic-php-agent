@@ -325,6 +325,14 @@ jobs:
           docker exec \
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/errors
+      - name: Run integration tests - events
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/events
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
