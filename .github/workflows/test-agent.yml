@@ -224,6 +224,7 @@ jobs:
         env:
           PHP: ${{matrix.php}}
           LIBC: ${{matrix.platform}}
+          PLATFORM: linux/${{matrix.arch}}
           AGENT_CODE: ${{github.workspace}}/php-agent
         working-directory: ./php-agent
         run: |
