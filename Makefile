@@ -492,6 +492,7 @@ endif
 include make/release.mk
 
 test-services-start:
+	docker compose pull $(SERVICES)
 	docker compose up --wait --build --remove-orphans -d $(SERVICES)
 
 test-services-stop:

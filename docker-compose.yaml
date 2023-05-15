@@ -51,6 +51,7 @@ services:
       - "5432:5432"
     container_name: postgres
   php:
+    platform: ${PLATFORM:-}
     image: newrelic/nr-php-agent-builder:make-php-${PHP}-${LIBC}-v1
 
     environment:
