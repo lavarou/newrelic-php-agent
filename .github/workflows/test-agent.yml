@@ -342,6 +342,9 @@ jobs:
         shell: bash
         run: |
           docker exec \
+          -e APP_supportability=${{secrets.APP_SUPPORTABILITY}} \
+          -e ACCOUNT_supportability=${{secrets.ACCOUNT_SUPPORTABILITY}} \
+          -e SYNTHETICS_HEADER_supportability=${{secrets.SYNTHETICS_HEADER_SUPPORTABILITY}} \
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/external
       - name: Stop services
