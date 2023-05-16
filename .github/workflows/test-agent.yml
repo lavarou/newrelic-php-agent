@@ -247,7 +247,7 @@ jobs:
           AGENT_CODE: ${{github.workspace}}/php-agent
         working-directory: ./php-agent
         run: |
-          make test-services-start SERVICES="php mysqldb"
+          make test-services-start
       - name: Debug php service
         if: ${{ matrix.arch == 'amd64' }}
         working-directory: ./php-agent
@@ -467,6 +467,7 @@ jobs:
         working-directory: ./php-agent
         shell: bash
         run: |
+          docker exec docker-php-ext-enable redis
           docker exec \
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/redis
@@ -476,6 +477,7 @@ jobs:
         shell: bash
         run: |
           docker exec \
+          -e ACCOUNT_supportability_trusted=${{secrets.ACCOUNT_SUPPORTABILITY_TRUSTED}} \
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/span_events
       - name: Run integration tests - sqlite
