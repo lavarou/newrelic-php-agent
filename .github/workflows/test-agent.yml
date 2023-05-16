@@ -390,6 +390,142 @@ jobs:
           docker exec \
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/logging
+      - name: Run integration tests - memcache
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/memcache
+      - name: Run integration tests - memcached
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/memcached
+      - name: Run integration tests - mongo
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/mongo
+      - name: Run integration tests - mysql
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/mysql
+      - name: Run integration tests - mysqli
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/mysqli
+      - name: Run integration tests - output
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/output
+      - name: Run integration tests - pdo
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/pdo
+      - name: Run integration tests - pgsql
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/pgsql
+      - name: Run integration tests - predis
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/predis
+      - name: Run integration tests - queue
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/queue
+      - name: Run integration tests - redis
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/redis
+      - name: Run integration tests - span_events
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/span_events
+      - name: Run integration tests - sqlite
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/sqlite
+      - name: Run integration tests - sqlite3
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/sqlite3
+      - name: Run integration tests - sqlitedatabase
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/sqlitedatabase
+      - name: Run integration tests - synthetics
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/synthetics
+      - name: Run integration tests - uopz
+        if: ${{ matrix.arch == 'amd64' }}
+        working-directory: ./php-agent
+        shell: bash
+        run: |
+          docker exec \
+          php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
+            tests/integration/uopz
       - name: Stop services
         if: ${{ matrix.arch == 'amd64' }}
         env:
