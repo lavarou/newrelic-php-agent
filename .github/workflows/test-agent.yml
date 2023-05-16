@@ -484,7 +484,7 @@ jobs:
         working-directory: ./php-agent
         shell: bash
         run: |
-          docker exec docker-php-ext-enable redis
+          docker exec php docker-php-ext-enable redis
           docker exec \
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/redis
