@@ -98,10 +98,6 @@ jobs:
           - php: '7.0'
           - php: '7.1'
           - php: '7.2'
-          - php: '7.3'
-          - php: '8.0'
-          - php: '8.1'
-          - php: '8.2'
     steps:
       - name: Checkout Repo
         uses: actions/checkout@v3
@@ -205,10 +201,6 @@ jobs:
           - php: '7.0'
           - php: '7.1'
           - php: '7.2'
-          - php: '7.3'
-          - php: '8.0'
-          - php: '8.1'
-          - php: '8.2'
     steps:
       - name: Checkout integration tests
         uses: actions/checkout@v3
@@ -508,6 +500,7 @@ jobs:
         shell: bash
         run: |
           docker exec \
+          -e SYNTHETICS_HEADER_supportability=${{secrets.SYNTHETICS_HEADER_SUPPORTABILITY}} \
           php bin/integration_runner -license ${{secrets.NR_TEST_LICENSE}} -collector ${{secrets.NR_COLLECTOR_HOST}} -agent agent/modules/newrelic.so \
             tests/integration/sqlitedatabase
       - name: Run integration tests - synthetics
