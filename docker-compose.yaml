@@ -52,7 +52,7 @@ services:
     container_name: postgres
   php:
     platform: ${PLATFORM:-}
-    image: newrelic/nr-php-agent-builder:make-php-${PHP}-${LIBC}-v1
+    image: newrelic/nr-php-agent-builder:make-php-${PHP}-${LIBC}-v2
 
     environment:
       MEMCACHE_HOST: memcached
