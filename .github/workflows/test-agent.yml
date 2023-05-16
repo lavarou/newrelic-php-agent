@@ -128,18 +128,26 @@ jobs:
           else 
             echo "AGENT_CHECK_VARIANT=valgrind" >> $GITHUB_OUTPUT
           fi
+      - name: Determine make-php image version
+        id: get-php-image-version
+        run: |
+          if [[ ${{matrix.php}} == '7.3' || ${{matrix.php}} == '7.4' ]]; then
+            echo "IMAGE_VERSION=v2" >> $GITHUB_OUTPUT
+          else
+            echo "IMAGE_VERSION=v1" >> $GITHUB_OUTPUT
+          fi
       - name: Build axiom
         if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
-          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION axiom 
+          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-${{ steps.get-php-image-version.outputs.IMAGE_VERSION }} axiom 
       - name: Build agent
         if: ${{ matrix.arch == 'amd64' }}
         run: >
           docker run --rm --platform linux/${{matrix.arch}}
           -v "${GITHUB_WORKSPACE}/php-agent":"/usr/local/src/newrelic-php-agent" 
-          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-$IMAGE_VERSION agent
+          $IMAGE_NAME:$IMAGE_TAG-${{matrix.php}}-${{matrix.platform}}-${{ steps.get-php-image-version.outputs.IMAGE_VERSION }} agent
       # - name: Build axiom unit tests
       #   if: ${{ matrix.arch == 'amd64' }}
       #   run: >
@@ -238,6 +246,14 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Determine make-php image version
+        id: get-php-image-version
+        run: |
+          if [[ ${{matrix.php}} == '7.3' || ${{matrix.php}} == '7.4' ]]; then
+            echo "IMAGE_VERSION=v2" >> $GITHUB_OUTPUT
+          else
+            echo "IMAGE_VERSION=v1" >> $GITHUB_OUTPUT
+          fi
       - name: Start services
         if: ${{ matrix.arch == 'amd64' }}
         env:
@@ -245,6 +261,7 @@ jobs:
           LIBC: ${{matrix.platform}}
           PLATFORM: linux/${{matrix.arch}}
           AGENT_CODE: ${{github.workspace}}/php-agent
+          IMAGE_VERSION: ${{ steps.get-php-image-version.outputs.IMAGE_VERSION }}
         working-directory: ./php-agent
         run: |
           make test-services-start
