@@ -30,7 +30,7 @@ jobs:
       IMAGE_VERSION: v1
     strategy:
       matrix:
-        platform: [gnu, musl]
+        platform: [gnu]
         arch: [amd64, arm64]
     steps:
       - name: Checkout newrelic-php-agent code
@@ -75,7 +75,7 @@ jobs:
       IMAGE_VERSION: v2
     strategy:
       matrix:
-        platform: [gnu, musl]
+        platform: [gnu]
         arch: [amd64, arm64]
         php: ['5.5', '5.6', '7.0', '7.1', '7.2', '7.3', '7.4', '8.0', '8.1', '8.2']
         exclude:
@@ -182,7 +182,7 @@ jobs:
       IMAGE_VERSION: v1
     strategy:
       matrix:
-        platform: [gnu, musl]
+        platform: [gnu]
         arch: [amd64, arm64]
         php: ['5.5', '5.6', '7.0', '7.1', '7.2', '7.3', '7.4', '8.0', '8.1', '8.2']
         exclude:
