@@ -1,0 +1,78 @@
+services:
+  go:
+    image: newrelic/nr-php-agent-builder:make-go-${LIBC:-gnu}
+    extends:
+      file: common-services.yml
+      service: go-base
+
+  php-7.0:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-7.0-${LIBC:-gnu}
+    environment:
+      PHPS: "7.0"
+
+  php-7.1:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-7.1-${LIBC:-gnu}
+    environment:
+      PHPS: "7.1"
+
+  php-7.2:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-7.2-${LIBC:-gnu}
+    environment:
+      PHPS: "7.2"
+
+  php-7.3:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-7.3-${LIBC:-gnu}
+    environment:
+      PHPS: "7.3"
+
+  php-7.4:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-7.4-${LIBC:-gnu}
+    environment:
+      PHPS: "7.4"
+
+  php-8.0:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-8.0-${LIBC:-gnu}
+    environment:
+      PHPS: "8.0"
+
+  php-8.1:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-8.1-${LIBC:-gnu}
+    environment:
+      PHPS: "8.1"
+
+  php-8.2:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-8.2-${LIBC:-gnu}
+    environment:
+      PHPS: "8.2"
+
+  php-8.3:
+    extends:
+      file: common-services.yml
+      service: php-base
+    image: newrelic/nr-php-agent-builder:make-php-8.3-${LIBC:-gnu}
+    environment:
+      PHPS: "8.3"

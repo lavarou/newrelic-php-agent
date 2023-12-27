@@ -1,0 +1,52 @@
+version: '2.4'
+
+services:
+  redis:
+    image: redis
+    restart: always
+    environment: &redis-env
+      REDIS_HOST: redisdb
+    ports:
+      - "6379:6379"
+    container_name: redisdb
+
+  mysql:
+    platform: linux/amd64
+    image: mysql:5.6
+    restart: always
+    environment: &mysql-env
+      MYSQL_ROOT_PASSWORD: admin
+      MYSQL_DATABASE: database
+      MYSQL_USER: admin
+      MYSQL_PASSWORD: admin
+      MYSQL_HOST: mysqldb
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysql", "--user=admin", "--password=admin", "-e", "SELECT 1"]
+      interval: 10s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    container_name: mysqldb
+
+  go-base:
+    # image: scratch
+    platform: ${PLATFORM:-}
+    entrypoint: tail
+    command: -f /dev/null
+    container_name: go
+    working_dir: ${PWD}
+    volumes:
+       - ${AGENT_CODE:-$PWD}:${PWD}
+  
+  php-base:
+    # image: scratch
+    platform: ${PLATFORM:-}
+    environment: 
+      <<: [*mysql-env, *redis-env]
+    entrypoint: tail
+    command: -f /dev/null
+    working_dir: ${PWD}
+    volumes:
+       - ${AGENT_CODE:-$PWD}:${PWD}
