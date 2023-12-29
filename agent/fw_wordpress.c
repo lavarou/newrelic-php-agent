@@ -132,16 +132,30 @@ static nr_matcher_t* nr_wordpress_plugin_matcher() {
   NRPRG(wordpress_plugin_matcher) = matcher;
   return matcher;
 }
+/*
+ * This code is used for function call debugging.
+ */
+#define MAX_NR_EXECUTE_DEBUG_STRLEN (80)
+#define NR_EXECUTE_DEBUG_STRBUFSZ (16384)
+
+extern int nr_format_zval_for_debug(zval* arg,
+                                    char* pbuf,
+                                    size_t pos,
+                                    size_t avail,
+                                    size_t depth);
 
 static nr_matcher_t* nr_wordpress_theme_matcher() {
   nr_matcher_t* matcher = NULL;
   zval* roots = NULL;
+  char argstr[NR_EXECUTE_DEBUG_STRBUFSZ];
+
 
   if (NRPRG(wordpress_theme_matcher)) {
     return NRPRG(wordpress_theme_matcher);
   }
 
   matcher = nr_matcher_create();
+  nrl_always("created theme matcher");
 
   /*
    * WordPress 2.9.0 and later include get_theme_roots(), which will give us
@@ -150,9 +164,11 @@ static nr_matcher_t* nr_wordpress_theme_matcher() {
    */
   roots = nr_php_call(NULL, "get_theme_roots");
   if (nr_php_is_zval_valid_string(roots)) {
+    nrl_always("get_theme_roots()=%s", Z_STRVAL_P(roots));
     nr_matcher_add_prefix(matcher, Z_STRVAL_P(roots));
   } else if (nr_php_is_zval_valid_array(roots)
              && (nr_php_zend_hash_num_elements(Z_ARRVAL_P(roots)) > 0)) {
+    nrl_always("get_theme_roots() an array");
     zval* path = NULL;
     ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(roots), path) {
       if (nr_php_is_zval_valid_string(path)) {
@@ -161,6 +177,12 @@ static nr_matcher_t* nr_wordpress_theme_matcher() {
     }
     ZEND_HASH_FOREACH_END();
   } else {
+    if (NULL != roots) {
+      nr_format_zval_for_debug(roots, argstr, 0, NR_EXECUTE_DEBUG_STRBUFSZ - 1, 0);
+      nrl_always("get_theme_roots()=" NRP_FMT, NRP_ARGSTR(argstr));
+    } else {
+      nrl_always("get_theme_roots()=nil");
+    }
     nr_matcher_add_prefix(matcher, "/wp-content/themes");
   }
 
@@ -254,18 +276,21 @@ static char* nr_wordpress_plugin_from_function(zend_function* func TSRMLS_DC) {
   plugin = nr_matcher_match_ex(nr_wordpress_plugin_matcher(), filename, filename_len, &plugin_len);
   plugin = nr_wordpress_strip_php_suffix(plugin, plugin_len);
   if (plugin) {
+    nrl_always("detected plugin: %s", plugin);
     goto cache_and_return;
   }
 
   plugin = nr_matcher_match_ex(nr_wordpress_theme_matcher(), filename, filename_len, &plugin_len);
   plugin = nr_wordpress_strip_php_suffix(plugin, plugin_len);
   if (plugin) {
+    nrl_always("detected theme: %s", plugin);
     goto cache_and_return;
   }
 
   plugin = nr_matcher_match_r_ex(nr_wordpress_core_matcher(), filename, filename_len, &plugin_len);
   plugin = nr_wordpress_strip_php_suffix(plugin, plugin_len);
   if (plugin) {
+    nrl_always("detected wp core: %s", plugin);
     /*
      * The core wordpress functions are anonymized, so we don't need to return
      * the name of the php file, and we can release the plugin. Give a better

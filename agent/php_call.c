@@ -39,6 +39,8 @@ zval* nr_php_call_user_func(zval* object_ptr,
     return NULL;
   }
 
+  nrl_always("%s: calling %s()", __func__, function_name);
+
   if ((NULL != params) && (param_count > 0)) {
     zend_uint i;
 
@@ -87,6 +89,8 @@ zval* nr_php_call_user_func(zval* object_ptr,
                                       retval, param_count, param_values,
                                       no_separation, symbol_table TSRMLS_CC);
 #endif /* PHP8+ */
+  nrl_always("%s: %s()=%d", __func__, function_name, zend_result);
+
   nr_php_zval_free(&fname);
 
   nr_free(param_values);

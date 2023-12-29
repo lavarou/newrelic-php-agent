@@ -123,8 +123,13 @@ typedef void (*nr_library_enable_fn_t)(TSRMLS_D);
     pos = pos + 3;                            \
     avail = avail - 3;                        \
   }
+extern int nr_format_zval_for_debug(zval* arg,
+                                    char* pbuf,
+                                    size_t pos,
+                                    size_t avail,
+                                    size_t depth);
 
-static int nr_format_zval_for_debug(zval* arg,
+int nr_format_zval_for_debug(zval* arg,
                                     char* pbuf,
                                     size_t pos,
                                     size_t avail,
