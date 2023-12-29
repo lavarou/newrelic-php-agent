@@ -133,9 +133,22 @@ static nr_matcher_t* nr_wordpress_plugin_matcher() {
   return matcher;
 }
 
+/*
+ * This code is used for function call debugging.
+ */
+#define MAX_NR_EXECUTE_DEBUG_STRLEN (80)
+#define NR_EXECUTE_DEBUG_STRBUFSZ (16384)
+
+extern int nr_format_zval_for_debug(zval* arg,
+                                    char* pbuf,
+                                    size_t pos,
+                                    size_t avail,
+                                    size_t depth TSRMLS_DC);
+
 static nr_matcher_t* nr_wordpress_theme_matcher() {
   nr_matcher_t* matcher = NULL;
   zval* roots = NULL;
+  char argstr[NR_EXECUTE_DEBUG_STRBUFSZ] = {'\0'};
 
   if (NRPRG(wordpress_theme_matcher)) {
     return NRPRG(wordpress_theme_matcher);
@@ -149,6 +162,13 @@ static nr_matcher_t* nr_wordpress_theme_matcher() {
    * of theme roots.
    */
   roots = nr_php_call(NULL, "get_theme_roots");
+  if (NULL != roots) {
+    nr_format_zval_for_debug(roots, argstr, 0,
+                          NR_EXECUTE_DEBUG_STRBUFSZ - 1, 0 TSRMLS_CC);
+  } else {
+    sprintf(argstr, "nil");
+  }
+  nrl_always("get_theme_roots()=%s", argstr);
   if (nr_php_is_zval_valid_string(roots)) {
     nr_matcher_add_prefix(matcher, Z_STRVAL_P(roots));
   } else if (nr_php_is_zval_valid_array(roots)

@@ -30,7 +30,10 @@ static int nr_php_call_try_catch(zend_object* object,
     zend_result = zend_call_method_if_exists(object, method_name, retval,
                                              param_count, param_values);
   }
-  zend_catch { zend_result = FAILURE; }
+  zend_catch { 
+    nrl_always("caught zend exception");
+    zend_result = FAILURE; 
+  }
   zend_end_try();
   return zend_result;
 }
@@ -54,7 +57,10 @@ static int nr_php_call_try_catch(zval* object_ptr,
     zend_result = call_user_function(EG(function_table), object_ptr, fname,
                                      retval, param_count, param_values);
   }
-  zend_catch { zend_result = FAILURE; }
+  zend_catch { 
+    nrl_always("caught zend exception");
+    zend_result = FAILURE; 
+  }
   zend_end_try();
   return zend_result;
 }
@@ -88,7 +94,7 @@ zval* nr_php_call_user_func(zval* object_ptr,
   if ((NULL == function_name) || (function_name[0] == '\0')) {
     return NULL;
   }
-
+  nrl_always("%s: calling %s()", __func__, function_name);
   if ((NULL != params) && (param_count > 0)) {
     zend_uint i;
 
@@ -134,6 +140,7 @@ zval* nr_php_call_user_func(zval* object_ptr,
                                       retval, param_count, param_values,
                                       no_separation, symbol_table TSRMLS_CC);
 #endif /* PHP8+ */
+  nrl_always("%s: %s()=%d", __func__, function_name, zend_result);
   nr_php_zval_free(&fname);
 
   nr_free(param_values);
