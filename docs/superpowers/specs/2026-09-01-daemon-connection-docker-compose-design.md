@@ -123,11 +123,14 @@ verified by reading its source rather than assumed:
   script needs to hardcode.
 
 **Build step per lane:** `docker compose run` the relevant builder image
-against the bind-mounted repo, execute `make agent-clean && make
-agent-for-release`, then locate the produced file by glob
-(`releases/*/agent/*/newrelic-*.so` for NTS, `releases/*/agent/*/newrelic-*-zts.so`
-for ZTS) rather than hardcoding `PHP_API_VERSION` — the runner script
-should not need to replicate that detection logic.
+against the bind-mounted repo, execute `make release-agent` — which
+already bundles the `agent-clean && agent-for-release` sequence
+(`make/release.mk:86-87`), so the runner script invokes just this one
+target, not the two-step sequence spelled out separately. Then locate the
+produced file by glob (`releases/*/agent/*/newrelic-*.so` for NTS,
+`releases/*/agent/*/newrelic-*-zts.so` for ZTS) rather than hardcoding
+`PHP_API_VERSION` — the runner script should not need to replicate that
+detection logic.
 
 ## Networking model
 
