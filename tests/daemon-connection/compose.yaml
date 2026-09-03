@@ -1,0 +1,4 @@
+services:
+  newrelic-daemon:
+    image: newrelic/php-daemon:latest
+    hostname: newrelic-daemon
