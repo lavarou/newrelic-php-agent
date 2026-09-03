@@ -45,6 +45,7 @@ build_so() {
   local tag; tag="$(builder_tag "$libc" "$thread_model")"
   echo "==> building newrelic.so (thread_model=$thread_model libc=$libc) via $tag"
   docker run --rm \
+    -e PCRE_STATIC=yes \
     -v "$REPO_ROOT":/usr/local/src/newrelic-php-agent \
     "newrelic/nr-php-agent-builder:$tag" \
     sh -c 'cd /usr/local/src/newrelic-php-agent && make release-agent'
