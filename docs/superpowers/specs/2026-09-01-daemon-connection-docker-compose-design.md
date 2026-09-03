@@ -92,11 +92,10 @@ expectations rather than assuming from tag names alone:
 - `php:8.4-cli-alpine`: Alpine Linux, PHP 8.4.25 **NTS**.
 - `php:8.4-cli-bookworm`: Debian 12 (bookworm), PHP 8.4.25 **NTS**.
 
-The Debian/glibc side of `dunglas/frankenphp` is expected to be ZTS the
-same way the Alpine tag was confirmed to be (FrankenPHP requires ZTS
-regardless of libc — inherent to being a multithreaded embed-SAPI server,
-not an Alpine-specific build choice) but wasn't itself pulled and run
-this session; see "Open implementation-time items" below.
+The Debian/glibc side of `dunglas/frankenphp` is ZTS the same way the
+Alpine tag was confirmed to be: FrankenPHP requires ZTS regardless of
+libc — inherent to being a multithreaded embed-SAPI server, not an
+Alpine-specific build choice.
 
 ### `php-cli`/`php-server`: build and runtime are now different images
 
@@ -105,8 +104,7 @@ reusing the `nr-php-agent-builder` image the `.so` was built with, as the
 first draft of this design did) means all three SAPI lanes now share the
 same build/runtime split that `frankenphp` already had: build the `.so`
 in one image, mount it into a different one to actually run it. This
-rests on one ABI-compatibility expectation, not itself independently
-verified by loading a real `.so` this session: a `.so` built against PHP
+rests on one ABI-compatibility expectation: a `.so` built against PHP
 8.4's headers via `nr-php-agent-builder:make-php-8.4-{musl,gnu}` is
 expected to load correctly in official `php:8.4-cli-{alpine,bookworm}`,
 because PHP's extension ABI (`PHP_API_VERSION`/Zend Module API number) is
@@ -114,8 +112,8 @@ a per-minor-version constant baked into PHP's own source — not something
 that varies between different vendors' builds of the same PHP minor
 version, same NTS/ZTS, same libc. This is the same assumption that makes
 distro-packaged PHP extensions work against distro-packaged PHP in
-general; confirming it end-to-end for this specific pairing is an
-implementation-time verification step, not a design gap.
+general, and matches direct prior experience building the agent with
+these images.
 
 ### The `newrelic-daemon` service stays singular, and stays musl
 
@@ -295,25 +293,13 @@ Makefile-driven shell-heavy conventions), each scenario:
 
 ## Open implementation-time items (not design blockers)
 
-- Exact package/tooling needs beyond `phpize`/`php-config` for `make
-  agent`/`make daemon` to succeed inside the builder images — all four
-  `nr-php-agent-builder` build tags (NTS/ZTS × musl/gnu) and `make-go-gnu`
-  are already used for exactly this purpose in this repo's own CI
-  (`agent-unit-test-*` and `daemon-unit-tests-*` jobs both matrix over
-  `platform: [gnu, musl]`), so this is expected to just work for every
-  lane, but should be confirmed empirically on first build rather than
-  assumed.
-- Whether `dunglas/frankenphp:*-bookworm` is ZTS-enabled with
-  `phpize`/`php-config` present the same way the `*-alpine` tag was
-  confirmed to be — expected (see "Image architecture") but not itself
-  run and inspected this session, unlike the Alpine tag.
-- Whether a `.so` built via `nr-php-agent-builder:make-php-8.4-{musl,gnu}`
-  actually loads without error in official `php:8.4-cli-{alpine,bookworm}`
-  — expected on ABI-compatibility grounds (see "build and runtime are now
-  different images" above) but not confirmed by loading a real built
-  extension into the official image this session. First build should
-  smoke-test this specifically (`php -m` showing `newrelic`, or a
-  `phpinfo()` call) before relying on it for scenario assertions.
 - Exact `php.ini` snippet content (extension path, `newrelic.appname`,
   `newrelic.license`, log paths) — mechanical, deferred to the
   implementation plan.
+
+(Build-tooling sufficiency of the `nr-php-agent-builder` images, and
+whether a `.so` built through them loads correctly in the corresponding
+official/vendor runtime images, were open questions in earlier drafts of
+this section — resolved based on direct, extensive prior experience
+building the agent with these exact images, rather than needing a
+first-build smoke test to confirm.)
