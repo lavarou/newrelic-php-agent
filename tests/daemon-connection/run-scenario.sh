@@ -214,6 +214,86 @@ scenario_r8() {
   echo "R8/$libc: PASS"
 }
 
+# Shared by R1 and R2: after triggering a request against a container that
+# should have connected to the external newrelic-daemon service, neither a
+# local spawn nor a connect failure should have happened.
+assert_connected_externally() {
+  local label="$1" service="$2"
+  if compose exec -T "$service" test -f /var/run/newrelic-daemon.pid; then
+    echo "$label: FAIL - local pidfile present; agent spawned its own daemon instead of using the external one" >&2
+    return 1
+  fi
+  if compose exec -T "$service" grep -q 'failed to connect to the newrelic-daemon' /tmp/newrelic-agent.log 2>/dev/null; then
+    echo "$label: FAIL - INIT-mode failure warning present; connect to the external daemon did not succeed" >&2
+    return 1
+  fi
+}
+
+# R1: php -S reports SAPI cli-server, so nr_php_process_will_fork() == true
+# (agent/php_minit.c:441-474) while still hitting the Connected outcome.
+scenario_r1() {
+  local libc="$1"
+  local service="php-server-$libc"
+
+  reset_container_state "$service"
+  set_external_daemon "$service"
+
+  local out
+  out="$(trigger_server "$service" 'php -S' php -S 0.0.0.0:8080 -t /app)"
+  if [ "$out" != "cli-server" ]; then
+    echo "R1/$libc: FAIL - expected SAPI name cli-server, got: $out" >&2
+    return 1
+  fi
+
+  assert_connected_externally "R1/$libc" "$service" || return 1
+  echo "R1/$libc: PASS"
+}
+
+# R2: both php-cli (will_fork=false because sapi_module.name=="cli") and
+# frankenphp (will_fork=false via the ZTS/is_frankenphp check) exercise the
+# same Connected/will_fork=false cell of the matrix.
+scenario_r2_cli() {
+  local libc="$1"
+  local service="php-cli-$libc"
+
+  reset_container_state "$service"
+  set_external_daemon "$service"
+
+  local out
+  out="$(trigger_cli "$service")"
+  if [ "$out" != "ok" ]; then
+    echo "R2-cli/$libc: FAIL - fixture script did not complete cleanly (got: $out)" >&2
+    return 1
+  fi
+
+  assert_connected_externally "R2-cli/$libc" "$service" || return 1
+  echo "R2-cli/$libc: PASS"
+}
+
+scenario_r2_frankenphp() {
+  local libc="$1"
+  local service="frankenphp-$libc"
+
+  reset_container_state "$service"
+  set_external_daemon "$service"
+
+  local out
+  out="$(trigger_server "$service" 'frankenphp php-server' frankenphp php-server --listen=:8080 --root=/app)"
+  if [ "$out" != "frankenphp" ]; then
+    echo "R2-frankenphp/$libc: FAIL - expected SAPI name frankenphp, got: $out" >&2
+    return 1
+  fi
+
+  assert_connected_externally "R2-frankenphp/$libc" "$service" || return 1
+  echo "R2-frankenphp/$libc: PASS"
+}
+
+scenario_r2() {
+  local libc="$1"
+  scenario_r2_cli "$libc"
+  scenario_r2_frankenphp "$libc"
+}
+
 main() {
   case "${1:-}" in
     build-so) build_all_so ;;
