@@ -44,7 +44,10 @@ find_so() {
     printf '  %s\n' "${matches[@]}" >&2
     return 1
   fi
-  [ "${#matches[@]}" -eq 1 ] && echo "${matches[0]}"
+  if [ "${#matches[@]}" -eq 1 ]; then
+    echo "${matches[0]}"
+  fi
+  return 0
 }
 
 # Builds one newrelic.so variant and stages it as
