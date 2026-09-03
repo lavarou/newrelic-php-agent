@@ -69,7 +69,7 @@ stage_daemon_musl() {
   echo "==> extracting musl newrelic-daemon binary from newrelic/php-daemon:latest"
   local cid
   cid="$(docker create newrelic/php-daemon:latest)"
-  trap "docker rm -f '$cid' >/dev/null 2>&1 || true" RETURN
+  trap "docker rm -f '$cid' >/dev/null 2>&1 || true" EXIT
   docker cp "$cid:/usr/bin/newrelic-daemon" "$ARTIFACTS_DIR/newrelic-daemon-musl"
   chmod +x "$ARTIFACTS_DIR/newrelic-daemon-musl"
 }
