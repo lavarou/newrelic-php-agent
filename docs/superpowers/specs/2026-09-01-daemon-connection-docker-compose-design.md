@@ -250,7 +250,7 @@ inside the container before triggering the request — agent must not spawn.
 
 ## Directory layout
 
-New, self-contained directory: `tests/docker/daemon-connection/`
+New, self-contained directory: `tests/daemon-connection/`
 - `compose.yaml` — seven services: `newrelic-daemon`, plus one musl and
   one glibc variant each of `php-cli`, `php-server`, and `frankenphp`
   (e.g. `php-cli-musl`/`php-cli-gnu`, `php-server-musl`/`php-server-gnu`,
