@@ -42,3 +42,23 @@ services:
       - ./artifacts/newrelic-daemon-gnu:/usr/bin/newrelic-daemon:ro
       - ./newrelic.ini:/usr/local/etc/php/conf.d/zz-newrelic.ini:ro
       - ./fixtures:/app:ro
+
+  frankenphp-musl:
+    image: dunglas/frankenphp:1-php8.4-alpine
+    entrypoint: ["tail"]
+    command: ["-f", "/dev/null"]
+    volumes:
+      - ./artifacts/newrelic-zts-musl.so:/opt/newrelic/newrelic.so:ro
+      - ./artifacts/newrelic-daemon-musl:/usr/bin/newrelic-daemon:ro
+      - ./newrelic.ini:/usr/local/etc/php/conf.d/zz-newrelic.ini:ro
+      - ./fixtures:/app:ro
+
+  frankenphp-gnu:
+    image: dunglas/frankenphp:1-php8.4-bookworm
+    entrypoint: ["tail"]
+    command: ["-f", "/dev/null"]
+    volumes:
+      - ./artifacts/newrelic-zts-gnu.so:/opt/newrelic/newrelic.so:ro
+      - ./artifacts/newrelic-daemon-gnu:/usr/bin/newrelic-daemon:ro
+      - ./newrelic.ini:/usr/local/etc/php/conf.d/zz-newrelic.ini:ro
+      - ./fixtures:/app:ro
