@@ -8,6 +8,9 @@ connection-lifecycle scenario matrix documented in
 boundaries (separate `newrelic-daemon` process vs. agent-embedded PHP
 process), with a focus on the FrankenPHP SAPI (persistent, multithreaded,
 non-forking) alongside standard forking/non-forking SAPIs for contrast.
+Each SAPI lane runs under both glibc and musl, since the agent and daemon
+both ship and are tested against both libc implementations elsewhere in
+this repo's own CI.
 
 This is new, greenfield test infrastructure — no docker-compose-based
 scenario testing of this kind exists in the repo today. It is intentionally
@@ -25,6 +28,12 @@ project must not risk regressing that.
 | R2 | Connected | n/a | false | `php-cli` and `frankenphp` services |
 | R7 | Failed (refused) | AGENT | irrelevant | SAPI service run with no external daemon; agent self-spawns |
 | R8 | Failed (refused) | INIT | irrelevant | Same, with agent forbidden to spawn |
+
+Every row above runs against **both** glibc and musl builds of the SAPI
+service in question — see "Image architecture" below. The
+`newrelic-daemon` service used for R1/R2 is not duplicated per libc (its
+own libc is irrelevant to what these rows test — see that section for
+why).
 
 **R1 verified via source, not assumed:** `nr_php_process_will_fork()`
 (`agent/php_minit.c:462-474`) returns `true` unless
@@ -56,42 +65,71 @@ prefork.
 
 ## Image architecture
 
-No custom Dockerfiles or image builds are required anywhere in this
-project. Everything uses existing published images, verified directly
+No custom Dockerfiles are required anywhere in this project — but
+supporting both libc implementations does mean the daemon binary can no
+longer *always* come from a single published image (see below).
+Everything still uses existing published images, verified directly
 against Docker Hub (pulled and inspected, not assumed from documentation):
 
-| Role | Image | Verified facts |
+| Role | musl (Alpine) | glibc (Debian) |
 |---|---|---|
-| Build NTS `.so` | `newrelic/nr-php-agent-builder:make-php-8.2-musl` | Alpine/musl, PHP 8.2.x NTS, has `phpize`/`php-config`/`make`/`git`; no Go toolchain (daemon builds are intentionally not this image's job) |
-| Build ZTS `.so` | `newrelic/nr-php-agent-builder:make-php-8.2-zts-musl` | Alpine/musl, PHP 8.2.19 **ZTS**, same toolchain; private registry, requires the same Docker Hub auth already used for the other builder tags |
-| `newrelic-daemon` service | `newrelic/php-daemon:latest` | Alpine/musl; binary at `/usr/bin/newrelic-daemon`; default entrypoint (`/usr/bin/docker-entrypoint.sh`) runs `newrelic-daemon --logfile /proc/self/fd/1 --watchdog-foreground --address=$(hostname):31339` — a **TCP** listener, not the abstract-socket default the agent itself would use standalone |
-| `php-cli` / `php-server` service | `newrelic/nr-php-agent-builder:make-php-8.2-musl` (same image reused as runtime, matching the existing root `docker-compose.yaml` `php` service pattern) | has a working `php` CLI binary already |
-| `frankenphp` service | `dunglas/frankenphp:1-php8.2-alpine` | Alpine/musl; confirmed by running it: `Thread Safety => enabled`, PHP 8.2.33 built `(ZTS)`; `/usr/local/bin/phpize` and `/usr/local/bin/php-config` present (not just documented — actually invoked) |
+| Build NTS `.so` | `newrelic/nr-php-agent-builder:make-php-8.2-musl` | `newrelic/nr-php-agent-builder:make-php-8.2-gnu` |
+| Build ZTS `.so` | `newrelic/nr-php-agent-builder:make-php-8.2-zts-musl` | `newrelic/nr-php-agent-builder:make-php-8.2-zts-gnu` |
+| Build daemon (from source) | not needed (see below) | `newrelic/nr-php-agent-builder:make-go-gnu` |
+| `php-cli` / `php-server` runtime | `newrelic/nr-php-agent-builder:make-php-8.2-musl` (same image reused as runtime, matching the existing root `docker-compose.yaml` `php` service pattern) | `newrelic/nr-php-agent-builder:make-php-8.2-gnu` (same pattern) |
+| `frankenphp` runtime | `dunglas/frankenphp:1-php8.2-alpine` | `dunglas/frankenphp:1-php8.2-bookworm` (Debian is FrankenPHP's own recommended default, per their docs) |
 
-All five images are musl/Alpine-based **by design**: it lets the single
-`newrelic/php-daemon` binary be copied as-is into every SAPI runtime
-container (for R7/R8 self-spawn) with no rebuild and no libc mismatch. The
-copy target matters: `agent/php_nrini.c:218` defines
-`NR_PHP_INI_DEFAULT_DAEMON_LOCATION` as `/usr/bin/newrelic-daemon` — which
-is exactly where `newrelic/php-daemon` already places the binary — so no
-`newrelic.daemon.location` ini override is needed in the SAPI containers.
+All six builder/runtime tags above are confirmed to exist on Docker Hub
+(pulled and/or `docker manifest inspect`ed this session — the `-zts-gnu`
+and `-zts-musl` tags live in a private registry reachable with the same
+Docker Hub auth already used for the other builder tags). The
+Alpine/musl side was verified by actually running it:
+`dunglas/frankenphp:1-php8.2-alpine` reports `Thread Safety => enabled`,
+PHP 8.2.33 built `(ZTS)`, with `/usr/local/bin/phpize` and
+`/usr/local/bin/php-config` present. The Debian/glibc side is expected to
+behave the same way (FrankenPHP requires ZTS regardless of libc — it's
+inherent to being a multithreaded embed-SAPI server, not an Alpine-specific
+build choice) but should be confirmed empirically on first build, same as
+any other item in "Open implementation-time items" below.
 
-### Why not build the daemon from source
+### The `newrelic-daemon` service stays singular, and stays musl
 
-`newrelic/nr-php-agent-builder:make-go-*` exists and could build
-`bin/daemon`, but there's no reason to: `newrelic/php-daemon` already
-ships a working, musl-compatible binary at the exact path the agent
-expects by default. Building from source would only be needed if a
-scenario required a daemon binary the published image doesn't have (none
-of R1/R2/R7/R8 do).
+`newrelic-daemon` (the external daemon used by R1/R2) is **not**
+duplicated into a glibc variant. Its own libc is irrelevant to what R1/R2
+test: it's a separate container, reached over TCP
+(`newrelic-daemon:31339` via Compose service-name DNS — see "Networking
+model"), and a libc mismatch cannot matter across a network socket. It
+stays `newrelic/php-daemon:latest` (Alpine/musl) for every lane,
+glibc-SAPI lanes included.
 
-## Build mechanism: producing both `.so` ABI variants without clobbering
+### Daemon binary for R7/R8: per-lane, not per-image
 
-Both builder images run `make agent` (indirectly) against the **same**
-bind-mounted repo checkout. Naively running `make agent` twice — once
-under `make-php-8.2-musl` (NTS), once under `make-php-8.2-zts-musl` (ZTS)
-— would overwrite `agent/modules/newrelic.so` the second time, destroying
-the first build's artifact.
+R7/R8 need the daemon binary present *inside* the SAPI container itself
+(the agent spawns it locally), so — unlike the external-daemon case above
+— its libc has to match the container it's running in:
+
+- **musl lanes:** copy `/usr/bin/newrelic-daemon` straight out of
+  `newrelic/php-daemon:latest`, as described in the original (musl-only)
+  draft of this design — no rebuild needed. `agent/php_nrini.c:218`
+  defines `NR_PHP_INI_DEFAULT_DAEMON_LOCATION` as
+  `/usr/bin/newrelic-daemon`, exactly where that image places the binary,
+  so no `newrelic.daemon.location` ini override is needed.
+- **glibc lanes:** no published glibc/Debian variant of `newrelic/php-daemon`
+  was found — checked several plausible tags (`:gnu`, `:debian`,
+  `:bookworm`, `:glibc`, `:latest-gnu`) against Docker Hub and none exist.
+  Build `bin/daemon` from source instead, via
+  `newrelic/nr-php-agent-builder:make-go-gnu` (confirmed to exist) running
+  `make daemon` against the bind-mounted repo, then copy the result to
+  `/usr/bin/newrelic-daemon` inside the glibc SAPI images (same target
+  path, so the ini default still applies with no override).
+
+## Build mechanism: producing all four `.so` ABI variants without clobbering
+
+All four builder images (NTS/ZTS × musl/gnu) run `make agent` (indirectly)
+against the **same** bind-mounted repo checkout. Naively running `make
+agent` repeatedly — once per builder image — would overwrite
+`agent/modules/newrelic.so` on each subsequent run, destroying the
+previous build's artifact.
 
 The repo already solves exactly this problem via `make/release.mk`,
 verified by reading its source rather than assumed:
@@ -121,23 +159,42 @@ verified by reading its source rather than assumed:
   (`make/php_versions.mk:23`) — i.e., whatever the container's actual
   architecture reports (`x86_64`/`aarch64`), not something the build
   script needs to hardcode.
+- `RELEASE_OS` itself also already varies by libc: it detects the active
+  C library (`make/release.mk:17-31`) and appends `-musl` when the
+  builder container is musl-based, leaving it as plain `linux` for glibc.
+  Combined with the `-zts`/empty suffix, this means all four builds
+  (NTS-musl, ZTS-musl, NTS-gnu, ZTS-gnu) land at four distinct paths under
+  `releases/` with no extra logic required to keep them apart.
 
-**Build step per lane:** `docker compose run` the relevant builder image
-against the bind-mounted repo, execute `make release-agent` — which
-already bundles the `agent-clean && agent-for-release` sequence
-(`make/release.mk:86-87`), so the runner script invokes just this one
-target, not the two-step sequence spelled out separately. Then locate the
-produced file by glob (`releases/*/agent/*/newrelic-*.so` for NTS,
-`releases/*/agent/*/newrelic-*-zts.so` for ZTS) rather than hardcoding
-`PHP_API_VERSION` — the runner script should not need to replicate that
-detection logic.
+**Build step per lane:** for each of the four `.so` variants, `docker
+compose run` the matching builder image against the bind-mounted repo and
+execute `make release-agent` — which already bundles the `agent-clean &&
+agent-for-release` sequence (`make/release.mk:86-87`), so the runner
+script invokes just this one target per variant, not the two-step
+sequence spelled out separately. Then locate each produced file by glob
+(`releases/*/agent/*/newrelic-*.so`, filtering on whether the path
+contains `musl` and whether the filename ends in `-zts.so`) rather than
+hardcoding `PHP_API_VERSION` or `RELEASE_OS` — the runner script should
+not need to replicate that detection logic.
+
+**Daemon build step (glibc lanes only):** the same `docker compose run`
+pattern, against `newrelic/nr-php-agent-builder:make-go-gnu`, executing
+`make daemon` against the bind-mounted repo to produce `bin/daemon`;
+copied into the glibc SAPI runtime images at `/usr/bin/newrelic-daemon`
+for R7/R8. Whether this builder image gets its own named `compose.yaml`
+entry or is invoked directly (mirroring how this repo's own CI runs these
+builder images via plain `docker run`, not through compose) is an
+implementation-plan detail, not a design one. No equivalent step exists
+for musl lanes — they get the binary from `newrelic/php-daemon` instead
+(see "Daemon binary for R7/R8" above).
 
 ## Networking model
 
 - **R1/R2** (external `newrelic-daemon` service): the `newrelic/php-daemon`
   image's default entrypoint already binds TCP `$(hostname):31339`. Docker
   Compose's built-in service-name DNS makes `newrelic-daemon:31339`
-  resolvable from the `php-cli`/`php-server`/`frankenphp` containers with
+  resolvable from any SAPI container — musl or glibc alike, since this is
+  plain TCP over the Compose network, not something libc-sensitive — with
   no extra networking config. (An earlier draft of this design proposed
   working around Linux abstract-socket network-namespace isolation with a
   shared-volume UDS path — that workaround is unnecessary once the actual
@@ -171,8 +228,10 @@ inside the container before triggering the request — agent must not spawn.
 ## Directory layout
 
 New, self-contained directory: `tests/docker/daemon-connection/`
-- `compose.yaml` — the four services (`newrelic-daemon`, `php-cli`,
-  `php-server`, `frankenphp`), no custom `build:` stanzas.
+- `compose.yaml` — seven services: `newrelic-daemon`, plus one musl and
+  one glibc variant each of `php-cli`, `php-server`, and `frankenphp`
+  (e.g. `php-cli-musl`/`php-cli-gnu`, `php-server-musl`/`php-server-gnu`,
+  `frankenphp-musl`/`frankenphp-gnu`). No custom `build:` stanzas.
 - `run-scenario.sh` — the scenario runner (see below).
 - A minimal `php.ini` snippet (extension path templated per lane) mounted
   into each SAPI container.
@@ -181,17 +240,21 @@ Root `docker-compose.yaml` and `files/Dockerfile` are untouched.
 
 ## Scenario runner
 
-A single shell script, `run-scenario.sh {r1|r2|r7|r8}`, per the chosen
-tooling approach (no new language/dependency, matches this repo's
-existing Makefile-driven shell-heavy conventions). Each scenario:
+A single shell script, `run-scenario.sh {r1|r2|r7|r8} {musl|gnu}` — the
+libc argument selects which pair of SAPI services (e.g.
+`php-server-musl` vs. `php-server-gnu`) the scenario runs against; the
+`newrelic-daemon` service is unaffected by it. Per the chosen tooling
+approach (no new language/dependency, matches this repo's existing
+Makefile-driven shell-heavy conventions), each scenario:
 
 1. Builds (or reuses already-built) `.so` artifacts via the mechanism
-   above, if not already present.
-2. Brings up the right service combination: `newrelic-daemon` + one SAPI
-   service for R1/R2; the SAPI service alone (no `newrelic-daemon`) for
-   R7/R8, with `/etc/newrelic/newrelic.cfg` touched or not per R7/R8.
-3. Triggers one request: `curl` for `php-server`/`frankenphp`, direct
-   invocation for `php-cli`.
+   above, if not already present, for the requested libc lane.
+2. Brings up the right service combination: `newrelic-daemon` + the
+   libc-selected SAPI service for R1/R2; that SAPI service alone (no
+   `newrelic-daemon`) for R7/R8, with `/etc/newrelic/newrelic.cfg` touched
+   or not per R7/R8.
+3. Triggers one request: `curl` for `php-server-*`/`frankenphp-*`, direct
+   invocation for `php-cli-*`.
 4. Asserts:
    - Agent log `nrl_debug`/`nrl_info` lines matching the expected
      MINIT-boundary behavior for that row (e.g. daemon-connection-failure
@@ -208,11 +271,17 @@ existing Makefile-driven shell-heavy conventions). Each scenario:
 ## Open implementation-time items (not design blockers)
 
 - Exact package/tooling needs beyond `phpize`/`php-config` for `make
-  agent` to succeed inside the Alpine builder images (e.g. `protobuf-c`,
-  `pcre`) — the images are already used for this purpose in this repo's
-  own CI (`agent-unit-test-*` jobs, `platform: musl` matrix entries), so
-  this is expected to just work, but should be confirmed empirically on
-  first build rather than assumed.
+  agent`/`make daemon` to succeed inside the builder images — all four
+  `nr-php-agent-builder` build tags (NTS/ZTS × musl/gnu) and `make-go-gnu`
+  are already used for exactly this purpose in this repo's own CI
+  (`agent-unit-test-*` and `daemon-unit-tests-*` jobs both matrix over
+  `platform: [gnu, musl]`), so this is expected to just work for every
+  lane, but should be confirmed empirically on first build rather than
+  assumed.
+- Whether `dunglas/frankenphp:*-bookworm` is ZTS-enabled with
+  `phpize`/`php-config` present the same way the `*-alpine` tag was
+  confirmed to be — expected (see "Image architecture") but not itself
+  run and inspected this session, unlike the Alpine tag.
 - Exact `php.ini` snippet content (extension path, `newrelic.appname`,
   `newrelic.license`, log paths) — mechanical, deferred to the
   implementation plan.
