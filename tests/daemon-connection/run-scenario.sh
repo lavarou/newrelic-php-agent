@@ -189,6 +189,31 @@ scenario_r7() {
   echo "R7/$libc: PASS"
 }
 
+# R8: same container as R7, but /etc/newrelic/newrelic.cfg present forces
+# NR_DAEMON_STARTUP_INIT (agent/php_minit.c:166-168) — the agent must not
+# spawn, and must log the exact warning at agent/php_minit.c:682-688.
+scenario_r8() {
+  local libc="$1"
+  local service="php-cli-$libc"
+
+  reset_container_state "$service"
+  set_init_mode "$service"
+
+  trigger_cli "$service" >/dev/null || true  # a failed daemon connect is expected; script output isn't the point here
+
+  if compose exec -T "$service" test -f /var/run/newrelic-daemon.pid; then
+    echo "R8/$libc: FAIL - pidfile present; agent spawned a daemon despite INIT mode" >&2
+    return 1
+  fi
+
+  if ! compose exec -T "$service" grep -q 'failed to connect to the newrelic-daemon' /tmp/newrelic-agent.log 2>/dev/null; then
+    echo "R8/$libc: FAIL - expected INIT-mode failure warning not found in agent log" >&2
+    return 1
+  fi
+
+  echo "R8/$libc: PASS"
+}
+
 main() {
   case "${1:-}" in
     build-so) build_all_so ;;
