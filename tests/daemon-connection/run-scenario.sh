@@ -153,6 +153,42 @@ trigger_server() {
   compose exec -T "$service" sh -c 'test -f /tmp/server.pid && kill "$(cat /tmp/server.pid)" 2>/dev/null; rm -f /tmp/server.pid; true'
 }
 
+# R7: no external daemon service, agent spawns its own from the bundled
+# binary. Verified via agent/php_minit.c:617-680 — the spawn happens only
+# when NR_DAEMON_STARTUP_AGENT is in effect, i.e. no /etc/newrelic/newrelic.cfg
+# and no blocking no_daemon_launch setting (both true by default here).
+scenario_r7() {
+  local libc="$1"
+  local service="php-cli-$libc"
+
+  reset_container_state "$service"
+
+  # Precondition: no pidfile before triggering.
+  if compose exec -T "$service" test -f /var/run/newrelic-daemon.pid; then
+    echo "R7/$libc: FAIL - stale pidfile present before trigger" >&2
+    return 1
+  fi
+
+  local out
+  out="$(trigger_cli "$service")"
+  if [ "$out" != "ok" ]; then
+    echo "R7/$libc: FAIL - fixture script did not complete cleanly (got: $out)" >&2
+    return 1
+  fi
+
+  if ! compose exec -T "$service" test -f /var/run/newrelic-daemon.pid; then
+    echo "R7/$libc: FAIL - no pidfile after trigger; agent did not spawn a daemon" >&2
+    return 1
+  fi
+
+  if compose exec -T "$service" grep -q 'failed to connect to the newrelic-daemon' /tmp/newrelic-agent.log 2>/dev/null; then
+    echo "R7/$libc: FAIL - agent logged the INIT-mode failure warning; startup mode was not AGENT" >&2
+    return 1
+  fi
+
+  echo "R7/$libc: PASS"
+}
+
 main() {
   case "${1:-}" in
     build-so) build_all_so ;;
