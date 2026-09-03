@@ -22,3 +22,23 @@ services:
       - ./artifacts/newrelic-daemon-gnu:/usr/bin/newrelic-daemon:ro
       - ./newrelic.ini:/usr/local/etc/php/conf.d/zz-newrelic.ini:ro
       - ./fixtures:/app:ro
+
+  php-server-musl:
+    image: php:8.4-cli-alpine
+    entrypoint: ["tail"]
+    command: ["-f", "/dev/null"]
+    volumes:
+      - ./artifacts/newrelic-nts-musl.so:/opt/newrelic/newrelic.so:ro
+      - ./artifacts/newrelic-daemon-musl:/usr/bin/newrelic-daemon:ro
+      - ./newrelic.ini:/usr/local/etc/php/conf.d/zz-newrelic.ini:ro
+      - ./fixtures:/app:ro
+
+  php-server-gnu:
+    image: php:8.4-cli-bookworm
+    entrypoint: ["tail"]
+    command: ["-f", "/dev/null"]
+    volumes:
+      - ./artifacts/newrelic-nts-gnu.so:/opt/newrelic/newrelic.so:ro
+      - ./artifacts/newrelic-daemon-gnu:/usr/bin/newrelic-daemon:ro
+      - ./newrelic.ini:/usr/local/etc/php/conf.d/zz-newrelic.ini:ro
+      - ./fixtures:/app:ro
