@@ -298,15 +298,62 @@ scenario_r2() {
   scenario_r2_frankenphp "$libc"
 }
 
+ensure_built() {
+  if [ ! -f "$ARTIFACTS_DIR/newrelic-nts-musl.so" ] || \
+     [ ! -f "$ARTIFACTS_DIR/newrelic-nts-gnu.so" ] || \
+     [ ! -f "$ARTIFACTS_DIR/newrelic-zts-musl.so" ] || \
+     [ ! -f "$ARTIFACTS_DIR/newrelic-zts-gnu.so" ]; then
+    build_all_so
+  fi
+  if [ ! -f "$ARTIFACTS_DIR/newrelic-daemon-musl" ] || \
+     [ ! -f "$ARTIFACTS_DIR/newrelic-daemon-gnu" ]; then
+    stage_daemon_binaries
+  fi
+}
+
+run_row() {
+  local row="$1" libc="$2"
+  case "$row" in
+    r1) scenario_r1 "$libc" ;;
+    r2) scenario_r2 "$libc" ;;
+    r7) scenario_r7 "$libc" ;;
+    r8) scenario_r8 "$libc" ;;
+    *) echo "unknown row: $row (expected r1|r2|r7|r8)" >&2; return 1 ;;
+  esac
+}
+
 main() {
   case "${1:-}" in
-    build-so) build_all_so ;;
-    stage-daemon) stage_daemon_binaries ;;
-    *)
-      echo "Usage: $0 build-so|stage-daemon" >&2
-      exit 1
-      ;;
+    build-so) build_all_so; return $? ;;
+    stage-daemon) stage_daemon_binaries; return $? ;;
   esac
+
+  local row="${1:-}" libc="${2:-}"
+  if [ -z "$row" ] || [ -z "$libc" ]; then
+    echo "Usage: $0 {r1|r2|r7|r8|all} {musl|gnu}" >&2
+    echo "       $0 build-so" >&2
+    echo "       $0 stage-daemon" >&2
+    exit 1
+  fi
+
+  ensure_built
+  compose up -d
+
+  local failures=0
+  if [ "$row" = all ]; then
+    for r in r1 r2 r7 r8; do
+      run_row "$r" "$libc" || failures=$((failures + 1))
+    done
+  else
+    run_row "$row" "$libc" || failures=$((failures + 1))
+  fi
+
+  if [ "$failures" -eq 0 ]; then
+    echo "=== all requested scenarios passed ==="
+  else
+    echo "=== $failures scenario(s) failed ===" >&2
+  fi
+  exit "$failures"
 }
 
 main "$@"
