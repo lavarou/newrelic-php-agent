@@ -65,11 +65,38 @@ build_all_so() {
   build_so gnu  zts
 }
 
+stage_daemon_musl() {
+  echo "==> extracting musl newrelic-daemon binary from newrelic/php-daemon:latest"
+  local cid
+  cid="$(docker create newrelic/php-daemon:latest)"
+  docker cp "$cid:/usr/bin/newrelic-daemon" "$ARTIFACTS_DIR/newrelic-daemon-musl"
+  docker rm "$cid" >/dev/null
+  chmod +x "$ARTIFACTS_DIR/newrelic-daemon-musl"
+}
+
+stage_daemon_gnu() {
+  echo "==> building gnu newrelic-daemon binary from source via make-go-gnu"
+  docker run --rm \
+    --entrypoint /bin/bash \
+    -v "$REPO_ROOT":/usr/local/src/newrelic-php-agent \
+    newrelic/nr-php-agent-builder:make-go-gnu \
+    -c 'cd /usr/local/src/newrelic-php-agent && make daemon'
+  cp -v "$REPO_ROOT/bin/daemon" "$ARTIFACTS_DIR/newrelic-daemon-gnu"
+  chmod +x "$ARTIFACTS_DIR/newrelic-daemon-gnu"
+}
+
+stage_daemon_binaries() {
+  mkdir -p "$ARTIFACTS_DIR"
+  stage_daemon_musl
+  stage_daemon_gnu
+}
+
 main() {
   case "${1:-}" in
     build-so) build_all_so ;;
+    stage-daemon) stage_daemon_binaries ;;
     *)
-      echo "Usage: $0 build-so" >&2
+      echo "Usage: $0 build-so|stage-daemon" >&2
       exit 1
       ;;
   esac
