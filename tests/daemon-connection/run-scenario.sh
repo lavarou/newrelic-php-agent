@@ -28,14 +28,23 @@ find_so() {
   if [ "$libc" = musl ]; then
     filters+=(-path '*/linux-musl/*')
   else
-    filters+=(-not -path '*/linux-musl/*')
+    filters+=(-path '*/linux/*')
   fi
   if [ "$thread_model" = zts ]; then
     filters+=(-name '*-zts.so')
   else
     filters+=(-name 'newrelic-*.so' -not -name '*-zts.so')
   fi
-  find "$REPO_ROOT/releases" "${filters[@]}" 2>/dev/null | head -1
+  local -a matches=()
+  while IFS= read -r line; do
+    [ -n "$line" ] && matches+=("$line")
+  done < <(find "$REPO_ROOT/releases" "${filters[@]}" 2>/dev/null)
+  if [ "${#matches[@]}" -gt 1 ]; then
+    echo "find_so: ambiguous - multiple candidates for $thread_model/$libc:" >&2
+    printf '  %s\n' "${matches[@]}" >&2
+    return 1
+  fi
+  [ "${#matches[@]}" -eq 1 ] && echo "${matches[0]}"
 }
 
 # Builds one newrelic.so variant and stages it as
@@ -60,6 +69,9 @@ build_so() {
 }
 
 build_all_so() {
+  echo "WARNING: rebuilding the agent runs 'make clean' against this checkout's" >&2
+  echo "agent/ directory and overwrites bin/daemon. Commit or stash any in-progress" >&2
+  echo "local build state first if you need to keep it." >&2
   build_so musl nts
   build_so gnu  nts
   build_so musl zts
@@ -231,10 +243,15 @@ assert_connected_externally() {
     echo "$label: FAIL - DNS resolution of the external daemon address failed; agent disabled itself" >&2
     return 1
   fi
+  if ! compose exec -T "$service" grep -q "attempt daemon connection via 'newrelic-daemon:31339'" /tmp/newrelic-agent.log 2>/dev/null; then
+    echo "$label: FAIL - no evidence MINIT ran with the external-daemon override applied (agent log missing, or extension never loaded)" >&2
+    return 1
+  fi
 }
 
 # R1: php -S reports SAPI cli-server, so nr_php_process_will_fork() == true
 # (agent/php_minit.c:441-474) while still hitting the Connected outcome.
+# Known gap: does not assert the will_fork()-specific pre-fork daemon-connection-close behavior — see README's "Known gaps".
 scenario_r1() {
   local libc="$1"
   local service="php-server-$libc"
