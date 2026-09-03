@@ -227,6 +227,10 @@ assert_connected_externally() {
     echo "$label: FAIL - INIT-mode failure warning present; connect to the external daemon did not succeed" >&2
     return 1
   fi
+  if compose exec -T "$service" grep -q 'could not resolve daemon address' /tmp/newrelic-agent.log 2>/dev/null; then
+    echo "$label: FAIL - DNS resolution of the external daemon address failed; agent disabled itself" >&2
+    return 1
+  fi
 }
 
 # R1: php -S reports SAPI cli-server, so nr_php_process_will_fork() == true
