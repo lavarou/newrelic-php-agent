@@ -71,26 +71,51 @@ longer *always* come from a single published image (see below).
 Everything still uses existing published images, verified directly
 against Docker Hub (pulled and inspected, not assumed from documentation):
 
+Target PHP version: **8.4** (the latest version the agent documents
+support for, per `docs/development.md`).
+
 | Role | musl (Alpine) | glibc (Debian) |
 |---|---|---|
-| Build NTS `.so` | `newrelic/nr-php-agent-builder:make-php-8.2-musl` | `newrelic/nr-php-agent-builder:make-php-8.2-gnu` |
-| Build ZTS `.so` | `newrelic/nr-php-agent-builder:make-php-8.2-zts-musl` | `newrelic/nr-php-agent-builder:make-php-8.2-zts-gnu` |
+| Build NTS `.so` | `newrelic/nr-php-agent-builder:make-php-8.4-musl` | `newrelic/nr-php-agent-builder:make-php-8.4-gnu` |
+| Build ZTS `.so` | `newrelic/nr-php-agent-builder:make-php-8.4-zts-musl` | `newrelic/nr-php-agent-builder:make-php-8.4-zts-gnu` |
 | Build daemon (from source) | not needed (see below) | `newrelic/nr-php-agent-builder:make-go-gnu` |
-| `php-cli` / `php-server` runtime | `newrelic/nr-php-agent-builder:make-php-8.2-musl` (same image reused as runtime, matching the existing root `docker-compose.yaml` `php` service pattern) | `newrelic/nr-php-agent-builder:make-php-8.2-gnu` (same pattern) |
-| `frankenphp` runtime | `dunglas/frankenphp:1-php8.2-alpine` | `dunglas/frankenphp:1-php8.2-bookworm` (Debian is FrankenPHP's own recommended default, per their docs) |
+| `php-cli` / `php-server` runtime | `php:8.4-cli-alpine` (official image) | `php:8.4-cli-bookworm` (official image) |
+| `frankenphp` runtime | `dunglas/frankenphp:1-php8.4-alpine` | `dunglas/frankenphp:1-php8.4-bookworm` (Debian is FrankenPHP's own recommended default, per their docs) |
 
-All six builder/runtime tags above are confirmed to exist on Docker Hub
-(pulled and/or `docker manifest inspect`ed this session — the `-zts-gnu`
-and `-zts-musl` tags live in a private registry reachable with the same
-Docker Hub auth already used for the other builder tags). The
-Alpine/musl side was verified by actually running it:
-`dunglas/frankenphp:1-php8.2-alpine` reports `Thread Safety => enabled`,
-PHP 8.2.33 built `(ZTS)`, with `/usr/local/bin/phpize` and
-`/usr/local/bin/php-config` present. The Debian/glibc side is expected to
-behave the same way (FrankenPHP requires ZTS regardless of libc — it's
-inherent to being a multithreaded embed-SAPI server, not an Alpine-specific
-build choice) but should be confirmed empirically on first build, same as
-any other item in "Open implementation-time items" below.
+All nine image tags above are confirmed to exist on Docker Hub (pulled
+and/or `docker manifest inspect`ed this session — the `-zts-gnu` and
+`-zts-musl` builder tags live in a private registry reachable with the
+same Docker Hub auth already used for the other builder tags). Pulled and
+ran every runtime image to confirm libc and thread-safety match
+expectations rather than assuming from tag names alone:
+- `dunglas/frankenphp:1-php8.4-alpine`: `Thread Safety => enabled`, ZTS.
+- `php:8.4-cli-alpine`: Alpine Linux, PHP 8.4.25 **NTS**.
+- `php:8.4-cli-bookworm`: Debian 12 (bookworm), PHP 8.4.25 **NTS**.
+
+The Debian/glibc side of `dunglas/frankenphp` is expected to be ZTS the
+same way the Alpine tag was confirmed to be (FrankenPHP requires ZTS
+regardless of libc — inherent to being a multithreaded embed-SAPI server,
+not an Alpine-specific build choice) but wasn't itself pulled and run
+this session; see "Open implementation-time items" below.
+
+### `php-cli`/`php-server`: build and runtime are now different images
+
+Switching the runtime to official `php:8.4-cli-*` images (rather than
+reusing the `nr-php-agent-builder` image the `.so` was built with, as the
+first draft of this design did) means all three SAPI lanes now share the
+same build/runtime split that `frankenphp` already had: build the `.so`
+in one image, mount it into a different one to actually run it. This
+rests on one ABI-compatibility expectation, not itself independently
+verified by loading a real `.so` this session: a `.so` built against PHP
+8.4's headers via `nr-php-agent-builder:make-php-8.4-{musl,gnu}` is
+expected to load correctly in official `php:8.4-cli-{alpine,bookworm}`,
+because PHP's extension ABI (`PHP_API_VERSION`/Zend Module API number) is
+a per-minor-version constant baked into PHP's own source — not something
+that varies between different vendors' builds of the same PHP minor
+version, same NTS/ZTS, same libc. This is the same assumption that makes
+distro-packaged PHP extensions work against distro-packaged PHP in
+general; confirming it end-to-end for this specific pairing is an
+implementation-time verification step, not a design gap.
 
 ### The `newrelic-daemon` service stays singular, and stays musl
 
@@ -282,6 +307,13 @@ Makefile-driven shell-heavy conventions), each scenario:
   `phpize`/`php-config` present the same way the `*-alpine` tag was
   confirmed to be — expected (see "Image architecture") but not itself
   run and inspected this session, unlike the Alpine tag.
+- Whether a `.so` built via `nr-php-agent-builder:make-php-8.4-{musl,gnu}`
+  actually loads without error in official `php:8.4-cli-{alpine,bookworm}`
+  — expected on ABI-compatibility grounds (see "build and runtime are now
+  different images" above) but not confirmed by loading a real built
+  extension into the official image this session. First build should
+  smoke-test this specifically (`php -m` showing `newrelic`, or a
+  `phpinfo()` call) before relying on it for scenario assertions.
 - Exact `php.ini` snippet content (extension path, `newrelic.appname`,
   `newrelic.license`, log paths) — mechanical, deferred to the
   implementation plan.
