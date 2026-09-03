@@ -92,6 +92,67 @@ stage_daemon_binaries() {
   stage_daemon_gnu
 }
 
+compose() {
+  docker compose -f "$COMPOSE_FILE" "$@"
+}
+
+# Clears anything a previous scenario run against this container might have
+# left behind, so results never leak between runs. Killing a stale
+# self-spawned daemon matters specifically for R7: the daemon's own
+# collision guard (an exclusive pidfile lock — see
+# daemon/internal/newrelic/pidfile.go) means a second spawn against an
+# already-running daemon exits silently without updating the pidfile,
+# which would otherwise look identical to "no spawn happened". Uses the
+# daemon's own pidfile to find and kill it directly, rather than pkill -f
+# (unavailable on gnu/Debian runtime images in this project — no procps).
+reset_container_state() {
+  local service="$1"
+  compose exec -T "$service" sh -c '
+    if [ -f /var/run/newrelic-daemon.pid ]; then
+      kill "$(cat /var/run/newrelic-daemon.pid)" 2>/dev/null || true
+    fi
+    rm -f /tmp/newrelic-agent.log /tmp/newrelic-daemon.log /var/run/newrelic-daemon.pid
+    rm -f /etc/newrelic/newrelic.cfg
+    rm -f /usr/local/etc/php/conf.d/zz-daemon-port.ini
+  ' || true
+}
+
+# R1/R2 need the agent to reach the external newrelic-daemon service
+# instead of trying (or being allowed to try) a local one; this writes
+# that one differing setting as its own conf.d file rather than baking it
+# into newrelic.ini, so R7/R8's containers stay on the shared default.
+set_external_daemon() {
+  local service="$1"
+  compose exec -T "$service" sh -c \
+    'echo "newrelic.daemon.port = \"newrelic-daemon:31339\"" > /usr/local/etc/php/conf.d/zz-daemon-port.ini'
+}
+
+set_init_mode() {
+  local service="$1"
+  compose exec -T "$service" sh -c 'mkdir -p /etc/newrelic && touch /etc/newrelic/newrelic.cfg'
+}
+
+trigger_cli() {
+  local service="$1"
+  compose exec -T "$service" php /app/index.php
+}
+
+# Starts a detached server command, curls /app/sapi.php through it, then
+# kills the server process. Captures the process's own PID (via a wrapper
+# that backgrounds it and echoes $!) and kills that PID directly, rather
+# than pattern-matching with pkill -f (unavailable on gnu/Debian runtime
+# images in this project). $match is kept in the signature for call-site
+# compatibility with later tasks but is no longer used for matching.
+trigger_server() {
+  local service="$1" match="$2"; shift 2
+  compose exec -T "$service" sh -c 'rm -f /tmp/server.pid'
+  compose exec -d "$service" sh -c '"$@" & echo $! > /tmp/server.pid' _ "$@"
+  sleep 1
+  compose exec -T "$service" \
+    php -r '$c=@file_get_contents("http://localhost:8080/sapi.php"); echo $c;'
+  compose exec -T "$service" sh -c 'test -f /tmp/server.pid && kill "$(cat /tmp/server.pid)" 2>/dev/null; rm -f /tmp/server.pid; true'
+}
+
 main() {
   case "${1:-}" in
     build-so) build_all_so ;;
