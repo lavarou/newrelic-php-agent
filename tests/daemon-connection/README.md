@@ -21,6 +21,19 @@ On first run (or after `artifacts/` is cleared), this builds four
 this to take several minutes. Subsequent runs skip the build step if the
 artifacts already exist.
 
+To build (or rebuild) a single variant directly, without running any
+scenarios, use `build-artifacts.sh`:
+
+```
+./build-artifacts.sh {musl|gnu} {nts|zts}   # build one newrelic.so variant
+./build-artifacts.sh all                    # build all four (what run-scenario.sh does on first run)
+./build-artifacts.sh stage-daemon           # stage both newrelic-daemon binaries
+```
+
+It can also be sourced (`source build-artifacts.sh`) to get `build_so`,
+`find_so`, etc. as functions in your own shell — it has no top-level
+side effects when sourced, only when run directly.
+
 ## Prerequisites
 
 - Docker, with `docker compose` v2.
