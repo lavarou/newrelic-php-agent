@@ -48,6 +48,9 @@ spec:
           env:
             - name: TOPOLOGY
               value: d3
+            # See d1/04-frankenphp-deployment.yaml: plain HTTP on :80.
+            - name: SERVER_NAME
+              value: ":80"
             - name: NEW_RELIC_LICENSE_KEY
               valueFrom:
                 secretKeyRef:

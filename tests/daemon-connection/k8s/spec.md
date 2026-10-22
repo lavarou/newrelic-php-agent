@@ -95,7 +95,10 @@ already the daemon binary — confirm with `docker inspect
 newrelic/php-daemon:latest --format '{{.Config.Entrypoint}}'` before
 relying on this). `dunglas/frankenphp`'s default `CMD` already serves
 `/app/public` via its built-in Caddyfile — confirmed directly by running the
-image.
+image. That Caddyfile's site address is `{$SERVER_NAME:localhost}`, and a
+`localhost` site redirects port 80 to `https://localhost/`, so
+`make curl-*-frankenphp` got an empty 308 until both `frankenphp`
+Deployments set `SERVER_NAME=:80` (found by running the PoC).
 
 **Daemon process mode differs by topology, and is not optional.** The
 daemon's true default (neither flag) is `RoleProgenitor`

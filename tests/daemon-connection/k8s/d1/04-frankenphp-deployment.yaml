@@ -24,6 +24,11 @@ spec:
           env:
             - name: TOPOLOGY
               value: d1
+            # The image's Caddyfile serves {$SERVER_NAME:localhost}, which
+            # redirects port 80 to https://localhost. A bare :80 serves the
+            # app over plain HTTP, which is what the Service forwards.
+            - name: SERVER_NAME
+              value: ":80"
             - name: NEW_RELIC_LICENSE_KEY
               valueFrom:
                 secretKeyRef:
