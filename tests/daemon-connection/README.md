@@ -76,6 +76,15 @@ services:
 `reset_container_state` clears both toggles (plus logs/pidfiles) before
 each scenario run, so results never leak between invocations.
 
+## Kubernetes topology PoC
+
+`k8s/` is a separate, manual proof of concept, not part of
+`run-scenario.sh`. On a local Rancher Desktop cluster it runs FrankenPHP
+and `php -S` against two daemon topologies side by side: D1, a daemon
+Deployment behind a ClusterIP Service over TCP, and D3, a native-sidecar
+daemon in each pod over the abstract socket. `k8s/spec.md` explains the
+design, what was verified, and its own known gaps; `k8s/Makefile` runs it.
+
 ## Known gaps
 
 - R1's assertion (`scenario_r1`) confirms `php -S` reports SAPI name
@@ -107,3 +116,8 @@ each scenario run, so results never leak between invocations.
 - `reset_container_state ... || true` swallows every failure, including
   the service not running, which then surfaces later as a misleading
   scenario diagnostic instead of at the point of failure.
+- `Caddyfile` and `fixtures/worker.php` are a FrankenPHP worker-mode
+  fixture that nothing uses yet: no compose service mounts the Caddyfile
+  and no scenario starts it, so the scripts have never run it. R2 covers
+  FrankenPHP in classic mode (`frankenphp php-server`) only; worker mode
+  has no row.
