@@ -22,7 +22,7 @@ project must not risk regressing that.
 
 ### In scope — MINIT-boundary matrix rows
 
-| Row | Connect outcome | Startup mode | Will fork? | Covered by |
+| Row | Connect outcome | Startup mode | May fork? | Covered by |
 |---|---|---|---|---|
 | R1 | Connected | n/a | true | `php-server` service (`php -S`, SAPI name `cli-server`) |
 | R2 | Connected | n/a | false | `php-cli` and `frankenphp` services |
@@ -35,12 +35,12 @@ service in question — see "Image architecture" below. The
 own libc is irrelevant to what these rows test — see that section for
 why).
 
-**R1 verified via source, not assumed:** `nr_php_process_will_fork()`
+**R1 verified via source, not assumed:** `nr_php_process_may_fork()`
 (`agent/php_minit.c:462-474`) returns `true` unless
 `NR_PHP_PROCESS_GLOBALS(cli)` is set — and that flag is only set when
 `sapi_module.name` string-compares equal to exactly `"cli"`
 (`agent/php_minit.c:441`). PHP's built-in web server reports SAPI name
-`cli-server`, a different string, so it falls through to `will_fork() ==
+`cli-server`, a different string, so it falls through to `may_fork() ==
 true` — satisfying R1 without needing a forking SAPI like FPM or Apache
 prefork.
 
@@ -55,7 +55,7 @@ prefork.
 - **O1–O3** (orthogonal cases: mid-request RPC failure, MSHUTDOWN close,
   threaded-Apache-MPM self-disable): out of scope per explicit direction —
   none of them are exercised by this project.
-- **R1-vs-R2 boolean logic** (`nr_php_process_will_fork()` itself) and the
+- **R1-vs-R2 boolean logic** (`nr_php_process_may_fork()` itself) and the
   **daemon-side pidfile lock race** (concurrent spawns) are unit-test
   concerns (C in `agent/tests/`, Go in `daemon/internal/newrelic/`
   respectively), not container-orchestration concerns. This project treats

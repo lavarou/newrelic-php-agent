@@ -156,7 +156,7 @@ correctly — one shared daemon Deployment, no ambiguity there.)
 level — it's categorically the same as Apache prefork/FPM, not CLI.**
 `sapi_module.name` for the CLI built-in web server is `"cli-server"`, not
 plain `"cli"` (`agent/php_minit.c:438-439`'s own comment says so).
-`nr_php_process_will_fork()` only special-cases literal `"cli"` and (under
+`nr_php_process_may_fork()` only special-cases literal `"cli"` and (under
 ZTS) `"frankenphp"` — everything else, `cli-server` included, falls through
 to `return true` (`php_minit.c:462-474`), confirmed independently of
 `docs/daemon-connection-scenarios.md`'s own R1 row, which already listed

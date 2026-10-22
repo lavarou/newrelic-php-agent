@@ -81,8 +81,8 @@ each scenario run, so results never leak between invocations.
 - R1's assertion (`scenario_r1`) confirms `php -S` reports SAPI name
   `cli-server` and that the agent connected to the external daemon, but
   does not yet assert the MINIT-boundary behavior specific to
-  `will_fork() == true` (the pre-fork `nr_agent_close_daemon_connection()`
-  call, logged at `agent/php_minit.c:706`/`axiom/nr_agent.c:633`). That log
+  `may_fork() == true` (the pre-fork `nr_agent_close_daemon_connection()`
+  call, logged at `agent/php_minit.c:707`/`axiom/nr_agent.c:657`). That log
   line also fires unconditionally at MSHUTDOWN, so a reliable check needs
   occurrence-counting or ordering against a fixture-emitted marker, not a
   bare grep — left as a follow-up rather than risking a subtly-wrong check.
@@ -92,7 +92,7 @@ each scenario run, so results never leak between invocations.
   waits for the progenitor process (`axiom/nr_daemon_spawn.c:260`), the
   progenitor waits up to that long for the worker to listen, and the
   watcher writes the pidfile before it starts the worker. The setting
-  defaults to `"0s"` (`agent/php_minit.c:662`), which makes the progenitor
+  defaults to `"0s"` (`agent/php_minit.c:661`), which makes the progenitor
   return at once; with that, or with a worker slower than 2s, the check
   races the daemon again. A bounded poll would remove the dependency.
   `reset_container_state` races the daemon in reverse: it signals the

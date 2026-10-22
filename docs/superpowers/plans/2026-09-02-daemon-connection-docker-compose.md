@@ -724,7 +724,7 @@ git commit -m "Implement R7 scenario: agent self-spawn verified via pidfile"
 ```bash
 # R8: same container as R7, but /etc/newrelic/newrelic.cfg present forces
 # NR_DAEMON_STARTUP_INIT (agent/php_minit.c:166-168) — the agent must not
-# spawn, and must log the exact warning at agent/php_minit.c:682-688.
+# spawn, and must log the exact warning at agent/php_minit.c:681-687.
 scenario_r8() {
   local libc="$1"
   local service="php-cli-$libc"
@@ -806,7 +806,7 @@ assert_connected_externally() {
   fi
 }
 
-# R1: php -S reports SAPI cli-server, so nr_php_process_will_fork() == true
+# R1: php -S reports SAPI cli-server, so nr_php_process_may_fork() == true
 # (agent/php_minit.c:441-474) while still hitting the Connected outcome.
 scenario_r1() {
   local libc="$1"
@@ -826,9 +826,9 @@ scenario_r1() {
   echo "R1/$libc: PASS"
 }
 
-# R2: both php-cli (will_fork=false because sapi_module.name=="cli") and
-# frankenphp (will_fork=false via the ZTS/is_frankenphp check) exercise the
-# same Connected/will_fork=false cell of the matrix.
+# R2: both php-cli (may_fork=false because sapi_module.name=="cli") and
+# frankenphp (may_fork=false via the ZTS/is_frankenphp check) exercise the
+# same Connected/may_fork=false cell of the matrix.
 scenario_r2_cli() {
   local libc="$1"
   local service="php-cli-$libc"

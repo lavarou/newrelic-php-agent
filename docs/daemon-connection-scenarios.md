@@ -12,7 +12,7 @@ and daemon-reachability states. Verified against source in
 |---|---|
 | **MINIT connect outcome** | `Connected` / `In-progress` (`EINPROGRESS`/`EALREADY`, fd stays allocated) / `Failed` (fd closed, reset to `-1`) — the 3-way result of `nr_agent_try_daemon_connect()` |
 | **Daemon startup mode** | `AGENT` (agent may spawn) / `INIT` (won't spawn) — from `nr_php_get_daemon_startup_mode()`; only actually matters when connect outcome ≠ `Connected` |
-| **Will fork?** | `nr_php_process_will_fork()` — derived from SAPI (`true` for everything except CLI/FrankenPHP-ZTS) |
+| **May fork?** | `nr_php_process_may_fork()` — derived from SAPI (`true` for everything except CLI/FrankenPHP-ZTS) |
 | **Spawn attempted?** | derived: only `Yes` when outcome ≠ `Connected` AND mode = `AGENT` |
 | **fd state entering RINIT** | what `nr_agent_daemon_fd`/`nr_agent_connection_state` actually is once MINIT finishes |
 | **First RINIT/txn-begin behavior** | No-op / fresh `connect()` / resume in-progress handshake |
@@ -20,18 +20,18 @@ and daemon-reachability states. Verified against source in
 
 ## Core MINIT-boundary matrix
 
-| ID | Connect outcome | Startup mode | Will fork? | Spawn attempted? | fd entering RINIT | RINIT behavior | Example SAPI(s) |
+| ID | Connect outcome | Startup mode | May fork? | Spawn attempted? | fd entering RINIT | RINIT behavior | Example SAPI(s) |
 |---|---|---|---|---|---|---|---|
 | R1 | Connected | n/a | true | No | closed → `-1` | real fresh `connect()` | Apache prefork, FPM, `cli-server`, unknown SAPIs |
 | R2 | Connected | n/a | false | No | kept, `CONNECTED` | no-op (early return) | CLI, FrankenPHP/ZTS |
-| R3 | In-progress | AGENT | true | **Yes** (racing against its own pending connect) | closed mid-handshake → `-1` | real fresh `connect()` (new socket) | any will-fork SAPI + agent-managed daemon that's slow to accept |
+| R3 | In-progress | AGENT | true | **Yes** (racing against its own pending connect) | closed mid-handshake → `-1` | real fresh `connect()` (new socket) | any may-fork SAPI + agent-managed daemon that's slow to accept |
 | R4 | In-progress | AGENT | false | **Yes** (racing) | kept, `IN_PROGRESS` | resumes handshake on same fd | CLI/FrankenPHP + agent-managed + slow daemon |
-| R5 | In-progress | INIT | true | No | closed mid-handshake → `-1` | real fresh `connect()` | will-fork SAPI + externally-managed daemon, slow to accept |
+| R5 | In-progress | INIT | true | No | closed mid-handshake → `-1` | real fresh `connect()` | may-fork SAPI + externally-managed daemon, slow to accept |
 | R6 | In-progress | INIT | false | No | kept, `IN_PROGRESS` | resumes handshake on same fd | CLI/FrankenPHP + externally-managed, slow daemon |
 | R7 | Failed (refused) | AGENT | true / false (irrelevant — fd already `-1`) | **Yes** | `-1` (already reset before close-decision runs) | real fresh `connect()` | any SAPI, daemon not running yet, agent spawns it |
 | R8 | Failed (refused) | INIT | true / false (irrelevant) | No | `-1` | real fresh `connect()`, succeeds once/if external daemon comes up | any SAPI, externally-managed daemon not up yet |
 
-R7 and R8 collapse the will-fork axis because closing an already-`-1` fd is
+R7 and R8 collapse the may-fork axis because closing an already-`-1` fd is
 a no-op regardless — the code path differs (one calls
 `nr_agent_close_daemon_connection()`, one doesn't) but the observable effect
 is identical.
