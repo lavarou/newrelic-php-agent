@@ -1,0 +1,112 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frankenphp
+  namespace: d3
+  labels:
+    app.kubernetes.io/name: frankenphp
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: frankenphp-daemon-poc
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app.kubernetes.io/name: frankenphp}
+  template:
+    metadata:
+      # The daemon sidecar's own identity (component: daemon) can't be
+      # expressed here — pod labels are shared by every container in the
+      # pod. It remains distinguishable only at the container level (the
+      # "newrelic-daemon" container name, e.g. `kubectl logs -c newrelic-daemon`).
+      labels:
+        app.kubernetes.io/name: frankenphp
+        app.kubernetes.io/component: web
+        app.kubernetes.io/part-of: frankenphp-daemon-poc
+    spec:
+      initContainers:
+        - name: newrelic-daemon
+          image: newrelic/php-daemon:latest
+          restartPolicy: Always # <- this is what makes it a *native* sidecar
+          # No --port: let it default to the abstract socket @newrelic on
+          # Linux (confirmed in daemon/internal/newrelic/listener.go).
+          # No compiled-in default resolves to @newrelic (see spec.md) —
+          # --address must be explicit, and it's --address, not --port
+          # (the latter is parsed but never consumed).
+          args: ["--watchdog-foreground", "--address", "@newrelic", "--loglevel", "debug", "--logfile", "/proc/self/fd/1"]
+          readinessProbe:
+            # Abstract sockets have no filesystem path to stat — but they
+            # are scoped to the network namespace and enumerated in
+            # /proc/net/unix, which this pod's containers share.
+            exec:
+              command: ["sh", "-c", "grep -q '@newrelic' /proc/net/unix"]
+            periodSeconds: 1
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+      containers:
+        - name: frankenphp
+          image: dunglas/frankenphp
+          env:
+            - name: TOPOLOGY
+              value: d3
+            - name: NEW_RELIC_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: newrelic-license
+                  key: license
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            tcpSocket: {port: 80}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          volumeMounts:
+            - name: app-code
+              mountPath: /app/public
+            - name: nr-ini
+              mountPath: /usr/local/etc/php/conf.d/newrelic.ini
+              subPath: newrelic.ini
+            - name: nr-agent-so
+              # Non-ZTS placeholder — see spec.md Known gaps.
+              mountPath: /usr/local/lib/php/extensions/no-debug-zts-20250925/newrelic.so
+            - name: nr-agent-logs
+              mountPath: /var/log/newrelic
+        - name: newrelic-agent-log
+          image: busybox
+          # A plain container, not an initContainer/native-sidecar — no
+          # ordering dependency, so no reason to complicate its lifecycle.
+          # touch first so tail never races the agent creating the file;
+          # deliberately no readinessProbe — this container never needs to
+          # gate the pod's own readiness. Needs its own POD_NAME to know
+          # which of this replica's uniquely-named log files to tail.
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command: ["sh", "-c", "touch /var/log/newrelic/newrelic-agent-${POD_NAME}.log && tail -f /var/log/newrelic/newrelic-agent-${POD_NAME}.log"]
+          volumeMounts:
+            - name: nr-agent-logs
+              mountPath: /var/log/newrelic
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 50m, memory: 32Mi}
+      volumes:
+        - name: app-code
+          hostPath:
+            path: ${REPO_ROOT}/tests/daemon-connection/k8s/app
+            type: Directory
+        - name: nr-ini
+          configMap:
+            name: newrelic-ini
+        - name: nr-agent-so
+          hostPath:
+            path: ${REPO_ROOT}/releases/linux/agent/aarch64/newrelic-20250925.so
+            type: File
+        - name: nr-agent-logs
+          emptyDir: {}

@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: newrelic-daemon
+  namespace: d1
+  labels:
+    app.kubernetes.io/name: newrelic-daemon
+    app.kubernetes.io/component: daemon
+    app.kubernetes.io/part-of: frankenphp-daemon-poc
+spec:
+  replicas: 2 # M — deliberately smaller than frankenphp's replica count (N)
+  selector:
+    matchLabels: {app.kubernetes.io/name: newrelic-daemon}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: newrelic-daemon
+        app.kubernetes.io/component: daemon
+        app.kubernetes.io/part-of: frankenphp-daemon-poc
+    spec:
+      containers:
+        - name: newrelic-daemon
+          image: newrelic/php-daemon:latest
+          # Confirm this image's baked-in ENTRYPOINT is already the daemon
+          # binary before relying on args-only (see spec.md Known gaps).
+          # --port is parsed but never actually consumed (only cfg.BindAddr
+          # is read by listenAndServe) — --address is the flag that matters.
+          # An explicit 0.0.0.0 host is required: parseBindAddr defaults to
+          # 127.0.0.1 whenever the host portion is empty, which would be
+          # unreachable from the Service.
+          args: ["--foreground", "--address", "0.0.0.0:20080", "--loglevel", "debug", "--logfile", "/proc/self/fd/1"]
+          ports:
+            - containerPort: 20080
+          readinessProbe:
+            tcpSocket: {port: 20080}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}

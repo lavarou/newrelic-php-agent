@@ -1,0 +1,97 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: phpcli
+  namespace: d3
+  labels:
+    app.kubernetes.io/name: phpcli
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: frankenphp-daemon-poc
+spec:
+  replicas: 3
+  selector:
+    matchLabels: {app.kubernetes.io/name: phpcli}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: phpcli
+        app.kubernetes.io/component: web
+        app.kubernetes.io/part-of: frankenphp-daemon-poc
+    spec:
+      # This pod can't share frankenphp's pod-local daemon sidecar — it's a
+      # different pod entirely — so it carries its own identical copy of
+      # the native-sidecar pattern from the frankenphp Deployment.
+      initContainers:
+        - name: newrelic-daemon
+          image: newrelic/php-daemon:latest
+          restartPolicy: Always
+          args: ["--watchdog-foreground", "--address", "@newrelic", "--loglevel", "debug", "--logfile", "/proc/self/fd/1"]
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "grep -q '@newrelic' /proc/net/unix"]
+            periodSeconds: 1
+          resources:
+            requests: {cpu: 100m, memory: 64Mi}
+            limits: {cpu: 200m, memory: 128Mi}
+      containers:
+        - name: phpcli
+          image: php:8.5-cli
+          command: ["php", "-S", "0.0.0.0:80", "-t", "/app/public"]
+          env:
+            - name: TOPOLOGY
+              value: d3
+            - name: NEW_RELIC_LICENSE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: newrelic-license
+                  key: license
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            tcpSocket: {port: 80}
+            periodSeconds: 2
+          resources:
+            requests: {cpu: 500m, memory: 512Mi}
+            limits: {cpu: "1", memory: 1Gi}
+          volumeMounts:
+            - name: app-code
+              mountPath: /app/public
+            - name: nr-ini
+              mountPath: /usr/local/etc/php/conf.d/newrelic.ini
+              subPath: newrelic.ini
+            - name: nr-agent-so
+              mountPath: /usr/local/lib/php/extensions/no-debug-non-zts-20250925/newrelic.so
+            - name: nr-agent-logs
+              mountPath: /var/log/newrelic
+        - name: newrelic-agent-log
+          image: busybox
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+          command: ["sh", "-c", "touch /var/log/newrelic/newrelic-agent-${POD_NAME}.log && tail -f /var/log/newrelic/newrelic-agent-${POD_NAME}.log"]
+          volumeMounts:
+            - name: nr-agent-logs
+              mountPath: /var/log/newrelic
+          resources:
+            requests: {cpu: 10m, memory: 16Mi}
+            limits: {cpu: 50m, memory: 32Mi}
+      volumes:
+        - name: app-code
+          hostPath:
+            path: ${REPO_ROOT}/tests/daemon-connection/k8s/app
+            type: Directory
+        - name: nr-ini
+          configMap:
+            name: newrelic-ini-phpcli
+        - name: nr-agent-so
+          hostPath:
+            path: ${REPO_ROOT}/releases/linux/agent/aarch64/newrelic-20250925.so
+            type: File
+        - name: nr-agent-logs
+          emptyDir: {}

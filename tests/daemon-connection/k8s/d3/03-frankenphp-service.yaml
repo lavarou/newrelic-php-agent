@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frankenphp
+  namespace: d3
+  labels:
+    app.kubernetes.io/name: frankenphp
+    app.kubernetes.io/component: web
+    app.kubernetes.io/part-of: frankenphp-daemon-poc
+spec:
+  type: LoadBalancer # k3s's built-in ServiceLB forwards this to localhost
+  selector: {app.kubernetes.io/name: frankenphp}
+  ports:
+    - port: ${D3_PORT} # distinct from D1's port to avoid a host-port bind conflict
+      targetPort: 80

@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: newrelic-ini
+  namespace: d3
+data:
+  newrelic.ini: |
+    extension=newrelic.so
+    newrelic.enabled=true
+    ; Not a secret — see d1/01-frankenphp-ini-configmap.yaml.
+    newrelic.license=${NEW_RELIC_LICENSE_KEY}
+    newrelic.appname=FrankenPHP D3 PoC
+    newrelic.loglevel=verbosedebug
+    ; /tmp is private per-container; this path is on a volume shared with
+    ; the newrelic-agent-log sidecar so its logs are viewable separately
+    ; from frankenphp's own via `kubectl logs -c newrelic-agent-log`.
+    ; See d1/01-frankenphp-ini-configmap.yaml — PID alone can't distinguish
+    ; replicas here, so POD_NAME (Downward API) goes in the filename.
+    newrelic.logfile=/var/log/newrelic/newrelic-agent-${POD_NAME}.log
+    ; D3: Linux abstract socket. This is already the built-in default on
+    ; both sides (NR_PHP_INI_DEFAULT_PORT / DefaultListenSocket()) — set
+    ; explicitly here only for self-documentation.
+    newrelic.daemon=@newrelic
+    newrelic.daemon.app_connect_timeout=20s
