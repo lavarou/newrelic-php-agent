@@ -20,5 +20,5 @@ data:
     ; D3: Linux abstract socket. This is already the built-in default on
     ; both sides (NR_PHP_INI_DEFAULT_PORT / DefaultListenSocket()) — set
     ; explicitly here only for self-documentation.
-    newrelic.daemon=@newrelic
+    newrelic.daemon.address=@newrelic
     newrelic.daemon.app_connect_timeout=20s

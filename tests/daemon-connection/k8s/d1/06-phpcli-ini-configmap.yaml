@@ -20,5 +20,5 @@ data:
     newrelic.logfile=/var/log/newrelic/newrelic-agent-${POD_NAME}.log
     ; Same external daemon Service as frankenphp — D1's daemon has no
     ; SAPI-specific configuration at all.
-    newrelic.daemon=newrelic-daemon.d1.svc.cluster.local:20080
+    newrelic.daemon.address=newrelic-daemon.d1.svc.cluster.local:20080
     newrelic.daemon.app_connect_timeout=20s

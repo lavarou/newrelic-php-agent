@@ -60,6 +60,14 @@ TCP fallback exists in this source at all. Both topologies now pass
   is empty (`worker.go:296`), which would be unreachable from the Service.
 - **D3**: `--address @newrelic`.
 
+**On the agent side the setting is `newrelic.daemon.address`.** Found by
+running the PoC: the ConfigMaps first said `newrelic.daemon=...`, which is
+not a registered setting, and PHP ignores unknown ini names without a
+warning. D1's agents therefore fell back to `@newrelic`, got
+`ECONNREFUSED`, found no `/usr/bin/newrelic-daemon` to spawn, and logged
+"New Relic PHP Agent globally disabled". D3 was unaffected only because
+`@newrelic` is the default.
+
 **`--port` is a dead flag — do not use it.** `BindPort` (`--port`) is parsed
 into the config struct (`main.go:62`) but never read anywhere else in the
 codebase; `listenAndServe` only ever consumes `cfg.BindAddr` (`--address`,
@@ -77,7 +85,7 @@ never relying on it.
 volumes (single-node Rancher Desktop cluster, `$HOME` is bind-mounted
 into the VM by default; the Makefile fills in `${REPO_ROOT}` with this
 checkout's path) and one `ConfigMap` per namespace for `newrelic.ini`
-(content differs per topology — the `newrelic.daemon` line above). None of
+(content differs per topology — the `newrelic.daemon.address` line above). None of
 this is how a real multi-node deployment would ship code or the extension —
 see Known gaps.
 

@@ -18,5 +18,5 @@ data:
     ; See d1/01-frankenphp-ini-configmap.yaml — PID alone can't distinguish
     ; replicas here, so POD_NAME (Downward API) goes in the filename.
     newrelic.logfile=/var/log/newrelic/newrelic-agent-${POD_NAME}.log
-    newrelic.daemon=@newrelic
+    newrelic.daemon.address=@newrelic
     newrelic.daemon.app_connect_timeout=20s

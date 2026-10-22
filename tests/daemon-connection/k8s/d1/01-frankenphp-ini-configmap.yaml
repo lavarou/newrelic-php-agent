@@ -21,6 +21,8 @@ data:
     ; POD_NAME (Downward API) makes the filename itself replica-unique.
     newrelic.logfile=/var/log/newrelic/newrelic-agent-${POD_NAME}.log
     ; D1: TCP via the ClusterIP Service, explicit port chosen for this PoC
-    ; (not a verified product default — see spec.md).
-    newrelic.daemon=newrelic-daemon.d1.svc.cluster.local:20080
+    ; (not a verified product default — see spec.md). The setting is
+    ; newrelic.daemon.address: PHP silently ignores an unregistered name
+    ; such as newrelic.daemon, and the agent then falls back to @newrelic.
+    newrelic.daemon.address=newrelic-daemon.d1.svc.cluster.local:20080
     newrelic.daemon.app_connect_timeout=20s
