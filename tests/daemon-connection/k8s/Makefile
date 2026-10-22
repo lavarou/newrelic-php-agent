@@ -32,16 +32,17 @@ down: d1-down d3-down
 # secret-d1/secret-d3 also idempotently ensure the namespace exists, since
 # they may run before the namespace's own YAML file is applied (Make
 # deduplicates a shared prerequisite within one invocation, so this runs
-# once per `make d1-up`, not once per sub-target).
+# once per `make d1-up`, not once per sub-target). The secret line is
+# silenced (@) because make would otherwise echo it with the key expanded.
 secret-d1:
 	@test -n "$(NEW_RELIC_LICENSE_KEY)" || { echo "NEW_RELIC_LICENSE_KEY is not set — export it or pass NEW_RELIC_LICENSE_KEY=... on the make command line" >&2; exit 1; }
 	kubectl create namespace d1 --dry-run=client -o yaml | kubectl apply -f -
-	kubectl create secret generic newrelic-license -n d1 --from-literal=license=$(NEW_RELIC_LICENSE_KEY) --dry-run=client -o yaml | kubectl apply -f -
+	@kubectl create secret generic newrelic-license -n d1 --from-literal=license=$(NEW_RELIC_LICENSE_KEY) --dry-run=client -o yaml | kubectl apply -f -
 
 secret-d3:
 	@test -n "$(NEW_RELIC_LICENSE_KEY)" || { echo "NEW_RELIC_LICENSE_KEY is not set — export it or pass NEW_RELIC_LICENSE_KEY=... on the make command line" >&2; exit 1; }
 	kubectl create namespace d3 --dry-run=client -o yaml | kubectl apply -f -
-	kubectl create secret generic newrelic-license -n d3 --from-literal=license=$(NEW_RELIC_LICENSE_KEY) --dry-run=client -o yaml | kubectl apply -f -
+	@kubectl create secret generic newrelic-license -n d3 --from-literal=license=$(NEW_RELIC_LICENSE_KEY) --dry-run=client -o yaml | kubectl apply -f -
 
 # Each web stack is its own selective target so either can run alone or
 # both side by side — the shared files (namespace, daemon) get applied by

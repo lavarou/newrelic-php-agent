@@ -218,7 +218,9 @@ Each web-stack container reads it via `env: valueFrom: secretKeyRef`.
 
 `make secret-d1`/`secret-d3` create/update the Secret from
 `$NEW_RELIC_LICENSE_KEY` in your shell (never written to any file in this
-directory) and refuse to run with a clear error if it's unset — verified
+directory, and not echoed: the recipe line is `@`-silenced, since make
+printed it with the key expanded until running the PoC caught that) and
+refuse to run with a clear error if it's unset — verified
 both the success and the failure path. They also idempotently ensure the
 namespace exists first, since they're a prerequisite of the `-up-*` targets
 and may run before `00-namespace.yaml` itself gets applied.
