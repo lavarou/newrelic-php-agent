@@ -40,6 +40,11 @@ side effects when sourced, only when run directly.
 - Docker Hub authentication with access to `newrelic/nr-php-agent-builder`'s
   private `-zts-musl`/`-zts-gnu` tags (`docker login` as an account with
   New Relic org access).
+- `NEW_RELIC_LICENSE_KEY`, exported or set in `.env` next to `compose.yaml`
+  (git ignores it). `docker compose up` refuses to start without it.
+  `NEW_RELIC_HOST` is optional and defaults to `collector.newrelic.com`.
+  `newrelic.ini` reads both from the environment, so the daemons connect
+  the application to a real collector.
 
 ## Things to know before running this
 
@@ -82,14 +87,18 @@ each scenario run, so results never leak between invocations.
   occurrence-counting or ordering against a fixture-emitted marker, not a
   bare grep — left as a follow-up rather than risking a subtly-wrong check.
 - R7 checks for the self-spawned daemon's pidfile one `compose exec`
-  round-trip after the fixture exits, but nothing guarantees the daemon
-  has written it by then: the agent only waits for the progenitor process
-  (`axiom/nr_daemon_spawn.c:260`), and `newrelic.daemon.start_timeout`
-  defaults to `"0s"` (`agent/php_minit.c:662`). It passes in practice; a
-  bounded poll would remove the flake. `reset_container_state` has the
-  same shape in reverse — it signals the daemon and removes the pidfile
-  without waiting for the process to exit, so a surviving daemon could let
-  a following R8 run connect to it and fail misleadingly.
+  round-trip after the fixture exits. Only `newrelic.daemon.start_timeout
+  = "2s"` in `newrelic.ini` orders that check after the write: the agent
+  waits for the progenitor process (`axiom/nr_daemon_spawn.c:260`), the
+  progenitor waits up to that long for the worker to listen, and the
+  watcher writes the pidfile before it starts the worker. The setting
+  defaults to `"0s"` (`agent/php_minit.c:662`), which makes the progenitor
+  return at once; with that, or with a worker slower than 2s, the check
+  races the daemon again. A bounded poll would remove the dependency.
+  `reset_container_state` races the daemon in reverse: it signals the
+  daemon and removes the pidfile without waiting for the process to exit,
+  so a surviving daemon could let a following R8 run connect to it and
+  fail misleadingly.
 - Nothing waits for the `newrelic-daemon` service to be ready: `main()`
   runs `compose up -d` and goes straight into scenarios, relying on
   incidental setup latency before R1/R2 connect. A compose `healthcheck`

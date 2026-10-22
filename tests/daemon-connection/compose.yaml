@@ -1,10 +1,17 @@
+x-newrelic-env: &newrelic-env
+  NEW_RELIC_LICENSE_KEY: ${NEW_RELIC_LICENSE_KEY:?Set NEW_RELIC_LICENSE_KEY in the environment before running `docker compose up`. See https://docs.docker.com/compose/environment-variables/set-environment-variables/ for more information.}
+  NEW_RELIC_HOST: ${NEW_RELIC_HOST:-collector.newrelic.com}
+
 services:
   newrelic-daemon:
     image: newrelic/php-daemon:latest
+    command: ["--loglevel", "debug"]
     hostname: newrelic-daemon
 
   php-cli-musl:
     image: php:8.4-cli-alpine
+    environment:
+      <<: *newrelic-env
     entrypoint: ["tail"]
     command: ["-f", "/dev/null"]
     volumes:
@@ -15,6 +22,8 @@ services:
 
   php-cli-gnu:
     image: php:8.4-cli-bookworm
+    environment:
+      <<: *newrelic-env
     entrypoint: ["tail"]
     command: ["-f", "/dev/null"]
     volumes:
@@ -25,6 +34,8 @@ services:
 
   php-server-musl:
     image: php:8.4-cli-alpine
+    environment:
+      <<: *newrelic-env
     entrypoint: ["tail"]
     command: ["-f", "/dev/null"]
     volumes:
@@ -35,6 +46,8 @@ services:
 
   php-server-gnu:
     image: php:8.4-cli-bookworm
+    environment:
+      <<: *newrelic-env
     entrypoint: ["tail"]
     command: ["-f", "/dev/null"]
     volumes:
@@ -45,6 +58,8 @@ services:
 
   frankenphp-musl:
     image: dunglas/frankenphp:1-php8.4-alpine
+    environment:
+      <<: *newrelic-env
     entrypoint: ["tail"]
     command: ["-f", "/dev/null"]
     volumes:
@@ -55,6 +70,8 @@ services:
 
   frankenphp-gnu:
     image: dunglas/frankenphp:1-php8.4-bookworm
+    environment:
+      <<: *newrelic-env
     entrypoint: ["tail"]
     command: ["-f", "/dev/null"]
     volumes:
