@@ -60,6 +60,9 @@ trigger_cli() {
 # than pattern-matching with pkill -f (unavailable on gnu/Debian runtime
 # images in this project). $match is kept in the signature for call-site
 # compatibility with later tasks but is no longer used for matching.
+# Callers capture this function's stdout as the SAPI name, so only the
+# php -r call may print anything; the other compose exec calls must stay
+# silent or they corrupt the comparison.
 trigger_server() {
   local service="$1" match="$2"; shift 2
   compose exec -T "$service" sh -c 'rm -f /tmp/server.pid'
@@ -132,10 +135,14 @@ scenario_r8() {
 }
 
 # Shared by R1 and R2: after triggering a request against a container that
-# should have connected to the external newrelic-daemon service, neither a
-# local spawn nor a connect failure should have happened.
+# should have connected to the external newrelic-daemon service, the agent
+# log must show the connect attempt and no connect or DNS failure.
 assert_connected_externally() {
   local label="$1" service="$2"
+  # Belt-and-braces only: this can never fire for R1/R2. A host:port address
+  # is NR_AGENT_CONN_TCP_HOST_PORT (axiom/nr_agent.c:195), which always
+  # selects NR_DAEMON_STARTUP_INIT (agent/php_minit.c:207-216), so the agent
+  # never self-spawns here. The log checks below are what discriminate.
   if compose exec -T "$service" test -f /var/run/newrelic-daemon.pid; then
     echo "$label: FAIL - local pidfile present; agent spawned its own daemon instead of using the external one" >&2
     return 1
@@ -253,6 +260,10 @@ main() {
   fi
 
   ensure_built
+  # Starts all 7 services, including newrelic-daemon for R7/R8. Harmless:
+  # R7/R8 use the default address, the abstract socket @newrelic
+  # (agent/php_agent.h:53), which is scoped to the container's network
+  # namespace, so they can't reach the external daemon by construction.
   compose up -d
 
   local failures=0

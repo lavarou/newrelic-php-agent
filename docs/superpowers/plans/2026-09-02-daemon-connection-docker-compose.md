@@ -884,7 +884,7 @@ bash -c '
   assert_connected_externally "manual-check" php-cli-musl && echo "unexpectedly passed" || echo "correctly failed: no external daemon was up"
 '
 ```
-Expected: `correctly failed: no external daemon was up` — since `newrelic-daemon` was never started, the agent's connect attempt to `newrelic-daemon:31339` fails, and (because no `/etc/newrelic/newrelic.cfg` is present) the agent falls into `NR_DAEMON_STARTUP_AGENT` and self-spawns instead — producing a local pidfile, which `assert_connected_externally` correctly flags as wrong for this scenario.
+Expected: `correctly failed: no external daemon was up` — since `newrelic-daemon` was never started, the agent's connect attempt to `newrelic-daemon:31339` fails. The agent does not self-spawn instead: a `host:port` address is `NR_AGENT_CONN_TCP_HOST_PORT` (`axiom/nr_agent.c:195`), which always selects `NR_DAEMON_STARTUP_INIT` (`agent/php_minit.c:207-216`), so no local pidfile appears. What `assert_connected_externally` flags is the agent log: the INIT-mode connect warning, or, if Compose DNS can't resolve `newrelic-daemon` at all, `could not resolve daemon address`.
 
 - [ ] **Step 3: Bring up all services and run the real R1/R2 scenarios for both libc**
 
