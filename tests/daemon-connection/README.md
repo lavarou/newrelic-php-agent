@@ -81,3 +81,20 @@ each scenario run, so results never leak between invocations.
   line also fires unconditionally at MSHUTDOWN, so a reliable check needs
   occurrence-counting or ordering against a fixture-emitted marker, not a
   bare grep — left as a follow-up rather than risking a subtly-wrong check.
+- R7 checks for the self-spawned daemon's pidfile one `compose exec`
+  round-trip after the fixture exits, but nothing guarantees the daemon
+  has written it by then: the agent only waits for the progenitor process
+  (`axiom/nr_daemon_spawn.c:260`), and `newrelic.daemon.start_timeout`
+  defaults to `"0s"` (`agent/php_minit.c:662`). It passes in practice; a
+  bounded poll would remove the flake. `reset_container_state` has the
+  same shape in reverse — it signals the daemon and removes the pidfile
+  without waiting for the process to exit, so a surviving daemon could let
+  a following R8 run connect to it and fail misleadingly.
+- Nothing waits for the `newrelic-daemon` service to be ready: `main()`
+  runs `compose up -d` and goes straight into scenarios, relying on
+  incidental setup latency before R1/R2 connect. A compose `healthcheck`
+  plus `depends_on: condition: service_healthy`, or a bounded poll, would
+  make it deterministic.
+- `reset_container_state ... || true` swallows every failure, including
+  the service not running, which then surfaces later as a misleading
+  scenario diagnostic instead of at the point of failure.
